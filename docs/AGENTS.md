@@ -1,7 +1,7 @@
 # AGENTS.md — cheat-sheet for AI / LLM agents
 
 If you are an AI agent reading this for the first time, internalise this
-file before writing code against `@recreatex-sdk/*`. Most "Recreatex
+file before writing code against `recreatex-sdk`. Most "Recreatex
 returned a weird error" sessions end on one of the items below.
 
 ## Auth
@@ -22,7 +22,7 @@ you'll forget a field. Use `client.post()` if you must reach a custom
 endpoint.
 
 For Space Magic the canonical IDs are exported as
-`@recreatex-sdk/spacemagic` constants:
+`recreatex-sdk/spacemagic` constants:
 - `SHOP_ID`
 - `DIVISION_IDS.spaceMagic | webshop | administration`
 - `GUEST_CUSTOMER_ID` — use this for anonymous voucher orders
@@ -36,7 +36,7 @@ For Space Magic the canonical IDs are exported as
 | `data.succes === false` is silent | The client throws `RecreatexApiError`. Don't second-guess; it's already handled. |
 | Passing `Article: null` on `ArticleSale` → "Object reference not set..." | Always `Article: { Id: "<guid>" }`. |
 | `PayLater: true` for Gift Certificates → `InvalidPayLaterPayment` | Provide a real `Payments[]` array with a `BasketPayment`. |
-| `CustomerId: "00000000-..."` → `MissingCustomer` | Use `GUEST_CUSTOMER_ID` from `@recreatex-sdk/spacemagic`. |
+| `CustomerId: "00000000-..."` → `MissingCustomer` | Use `GUEST_CUSTOMER_ID` from `recreatex-sdk/spacemagic`. |
 | `BasketPayment.PaymentMethod: { ... }` (nested) → type-not-found | Flat: `PaymentMethodId: "<guid>"` directly on the `BasketPayment`. |
 | `ListVisitingCustomersInformation.totalVisitors` for "guests today" | It counts SCANS (~2× real). Use `findAccessZones({ today: true }).visitorsToday` and persist it. |
 | `FindAccessZones` with `OccupancyFrom/Until` for historic counts | The fields are accepted but ignored. The endpoint is LIVE-ONLY. |
@@ -68,7 +68,7 @@ const visits = await rx.expositions.findOrganisedVisits({
 });
 
 // error path
-import { RecreatexApiError, RecreatexHttpError } from '@recreatex-sdk/core';
+import { RecreatexApiError, RecreatexHttpError } from 'recreatex-sdk/core';
 try {
   ...
 } catch (err) {
@@ -100,4 +100,4 @@ try {
 
 Use `client.post()` directly — it adds the Context, runs retry/timeout,
 throws typed errors. Then propose adding a typed wrapper to the
-appropriate module file (`packages/core/src/modules/<namespace>.ts`).
+appropriate module file (`src/core/modules/<namespace>.ts`).

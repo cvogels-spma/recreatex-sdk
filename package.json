@@ -1,22 +1,44 @@
 {
-  "name": "recreatex-sdk-monorepo",
-  "private": true,
+  "name": "recreatex-sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for the Recreatex / Vintia / Gantner JSON API",
   "type": "module",
-  "packageManager": "pnpm@9.12.0",
+  "main": "./dist/core.js",
+  "module": "./dist/core.js",
+  "types": "./dist/core.d.ts",
+  "exports": {
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./spacemagic": {
+      "types": "./dist/spacemagic.d.ts",
+      "import": "./dist/spacemagic.js"
+    }
+  },
+  "files": ["dist", "src", "README.md", "docs"],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
-    "clean": "pnpm -r clean",
-    "smoke": "tsx scripts/smoke.ts"
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "prepare": "tsup"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
+    "rimraf": "^6.0.1",
     "tsup": "^8.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cvogels-spma/recreatex-sdk.git"
   }
 }

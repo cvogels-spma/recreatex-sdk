@@ -10,7 +10,7 @@ import {
   classifyVoucher,
   findVoucher,
   gastroGroupName,
-} from '../src/index.js';
+} from '../../src/spacemagic/index.js';
 
 describe('extractKind', () => {
   it('handles Geburtstag / Name', () => {

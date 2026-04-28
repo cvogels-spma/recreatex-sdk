@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ReCreateXClient } from '../src/index.js';
+import { ReCreateXClient } from '../../src/core/index.js';
 
 function fetchSpy(payload: unknown) {
   const calls: Array<{ url: string; body: unknown }> = [];

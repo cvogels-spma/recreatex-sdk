@@ -4,7 +4,7 @@ import {
   RecreatexHttpError,
   RecreatexApiError,
   RecreatexTimeoutError,
-} from '../src/index.js';
+} from '../../src/core/index.js';
 
 function mockFetch(handler: (url: string, init: RequestInit) => Response | Promise<Response>) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

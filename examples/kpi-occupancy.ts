@@ -2,8 +2,8 @@
  * Read live park occupancy.
  */
 
-import { ReCreateXClient } from '@recreatex-sdk/core';
-import { SHOP_ID, SPACE_MAGIC_ZONE_ID } from '@recreatex-sdk/spacemagic';
+import { ReCreateXClient } from 'recreatex-sdk/core';
+import { SHOP_ID, SPACE_MAGIC_ZONE_ID } from 'recreatex-sdk/spacemagic';
 
 const rx = new ReCreateXClient({
   baseUrl: 'https://wsdlspacemagic.recreatex.be',

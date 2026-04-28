@@ -4,8 +4,8 @@
  *   tsx examples/birthday-availability.ts <expositionId> 2026-05-12
  */
 
-import { ReCreateXClient } from '@recreatex-sdk/core';
-import { SHOP_ID } from '@recreatex-sdk/spacemagic';
+import { ReCreateXClient } from 'recreatex-sdk/core';
+import { SHOP_ID } from 'recreatex-sdk/spacemagic';
 
 const [, , expositionId, dateYmd = '2026-05-12'] = process.argv;
 if (!expositionId) {

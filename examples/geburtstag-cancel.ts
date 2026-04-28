@@ -5,8 +5,8 @@
  * production pattern is Cancel → Mollie refund → fresh checkout.
  */
 
-import { ReCreateXClient } from '@recreatex-sdk/core';
-import { SHOP_ID } from '@recreatex-sdk/spacemagic';
+import { ReCreateXClient } from 'recreatex-sdk/core';
+import { SHOP_ID } from 'recreatex-sdk/spacemagic';
 
 const [, , visitId, reasonId] = process.argv;
 if (!visitId || !reasonId) {

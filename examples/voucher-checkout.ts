@@ -13,14 +13,14 @@
  * your own integration.
  */
 
-import { ReCreateXClient, BasketTypeStrings, uuidv4 } from '@recreatex-sdk/core';
-import type { Basket } from '@recreatex-sdk/core';
+import { ReCreateXClient, BasketTypeStrings, uuidv4 } from 'recreatex-sdk/core';
+import type { Basket } from 'recreatex-sdk/core';
 import {
   SHOP_ID,
   GUEST_CUSTOMER_ID,
   PAYMENT_METHOD_ID_KARTENZAHLUNG,
   findVoucher,
-} from '@recreatex-sdk/spacemagic';
+} from 'recreatex-sdk/spacemagic';
 
 const rx = new ReCreateXClient({
   baseUrl: 'https://wsdlspacemagic.recreatex.be',

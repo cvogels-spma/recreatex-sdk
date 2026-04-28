@@ -10,7 +10,7 @@ import type {
   OrganisedVisit,
   OrganisedVisitArticle,
   OrganisedVisitPeriodReservation,
-} from '@recreatex-sdk/core';
+} from '../../core/index.js';
 
 const NON_KIND_PREFIX_RE =
   /^(vereinsfeier|firmenfeier|jga|junggesell\w*|gruppenbuchung|gruppenfeier|kindergruppe|jubil(ae|ä)um|abschluss(feier)?|teamfeier|klassenfeier)\b/i;

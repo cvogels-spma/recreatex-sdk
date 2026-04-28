@@ -14,7 +14,7 @@ import {
   uuidv4,
   buildContext,
   STABLE_SESSION_ID,
-} from '../src/index.js';
+} from '../../src/core/index.js';
 
 describe('date helpers', () => {
   it('ymd formats YYYY-MM-DD in Berlin tz', () => {

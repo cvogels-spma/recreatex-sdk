@@ -2,7 +2,7 @@
  * Categorise an OrganisedVisit into a Space-Magic-specific bucket.
  */
 
-import type { OrganisedVisit } from '@recreatex-sdk/core';
+import type { OrganisedVisit } from '../../core/index.js';
 
 export type VisitCategory = 'birthday' | 'escape' | 'regular' | 'other';
 

@@ -3,18 +3,18 @@
 TypeScript SDK for the **Recreatex / Vintia / Gantner** JSON API
 (`wsdlspacemagic.recreatex.be` and friends).
 
-Two packages:
+One package, two subpath exports:
 
-| Package | Purpose |
+| Subpath | Purpose |
 |---|---|
-| `@recreatex-sdk/core` | Domain-agnostic API client (HTTP, types, retry, pagination, basket flow) |
-| `@recreatex-sdk/spacemagic` | Space-Magic-specific helpers (voucher SKUs, gastro groups, visit mappers) |
+| `recreatex-sdk/core` | Domain-agnostic API client (HTTP, types, retry, pagination, basket flow) |
+| `recreatex-sdk/spacemagic` | Space-Magic-specific helpers (voucher SKUs, gastro groups, visit mappers) |
 
 ## Quickstart
 
 ```ts
-import { ReCreateXClient } from '@recreatex-sdk/core';
-import { SHOP_ID, GUEST_CUSTOMER_ID, VOUCHER_SKUS } from '@recreatex-sdk/spacemagic';
+import { ReCreateXClient } from 'recreatex-sdk/core';
+import { SHOP_ID, GUEST_CUSTOMER_ID, VOUCHER_SKUS } from 'recreatex-sdk/spacemagic';
 
 const rx = new ReCreateXClient({
   baseUrl:  'https://wsdlspacemagic.recreatex.be',
@@ -41,9 +41,7 @@ npm install git+https://github.com/cvogels-spma/recreatex-sdk.git#v0.1.0
 npm install git+https://github.com/cvogels-spma/recreatex-sdk.git#abc1234
 ```
 
-When the workspace publishes both packages from a single repo, the consumer
-gets `@recreatex-sdk/core` and (optionally) `@recreatex-sdk/spacemagic` in
-one install.
+A single `npm install` from the git URL gives you both subpaths.
 
 ## Docs
 
@@ -70,9 +68,10 @@ type-defs scraped from live captures. This SDK consolidates the lot:
 ## Repo layout
 
 ```
-packages/
-  core/         @recreatex-sdk/core
-  spacemagic/   @recreatex-sdk/spacemagic
+src/
+  core/         → bundled to dist/core.js (subpath: recreatex-sdk/core)
+  spacemagic/   → bundled to dist/spacemagic.js (subpath: recreatex-sdk/spacemagic)
+test/
 docs/
 examples/
 ```
@@ -80,10 +79,10 @@ examples/
 ## Develop
 
 ```bash
-pnpm install
-pnpm build
-pnpm test
-pnpm typecheck
+npm install
+npm run build
+npm test
+npm run typecheck
 ```
 
 Smoke-tests against the live API live in `scripts/smoke.ts` and read

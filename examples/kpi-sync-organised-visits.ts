@@ -2,13 +2,13 @@
  * Sync OrganisedVisits → local rows. Mirrors the kpi-dashboard sync job.
  */
 
-import { ReCreateXClient, ymdWindow } from '@recreatex-sdk/core';
+import { ReCreateXClient, ymdWindow } from 'recreatex-sdk/core';
 import {
   SHOP_ID,
   categorizeVisit,
   mapBirthdayBooking,
   mapEscapeBooking,
-} from '@recreatex-sdk/spacemagic';
+} from 'recreatex-sdk/spacemagic';
 
 const rx = new ReCreateXClient({
   baseUrl: 'https://wsdlspacemagic.recreatex.be',

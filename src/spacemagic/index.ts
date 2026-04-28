@@ -1,6 +1,6 @@
 /**
- * @recreatex-sdk/spacemagic — Space Magic-specific helpers on top of
- * `@recreatex-sdk/core`.
+ * `recreatex-sdk/spacemagic` — Space Magic-specific helpers on top of
+ * `recreatex-sdk/core`.
  *
  *  - {@link SHOP_ID}, {@link DIVISION_IDS}, {@link GUEST_CUSTOMER_ID},
  *    {@link SPACE_MAGIC_ZONE_ID}

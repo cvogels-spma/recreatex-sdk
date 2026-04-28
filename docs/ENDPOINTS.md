@@ -1,6 +1,6 @@
 # Endpoint reference
 
-Every Recreatex JSON endpoint surfaced by `@recreatex-sdk/core`. All are
+Every Recreatex JSON endpoint surfaced by `recreatex-sdk/core`. All are
 **POST** with a JSON body that includes a `Context` block (the SDK injects
 this for you).
 

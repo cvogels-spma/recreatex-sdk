@@ -6,7 +6,7 @@
  * adapt — they're reference impls, not law.
  */
 
-import type { OrganisedVisit } from '@recreatex-sdk/core';
+import type { OrganisedVisit } from '../../core/index.js';
 import {
   extractEssen,
   extractKind,

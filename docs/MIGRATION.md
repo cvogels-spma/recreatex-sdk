@@ -1,7 +1,7 @@
 # Migration guide
 
 Three Space Magic projects currently call Recreatex directly. This guide
-shows how to swap each over to `@recreatex-sdk/*`.
+shows how to swap each over to `recreatex-sdk`.
 
 ## 1. space-magic-birthday-landing-page
 
@@ -11,8 +11,8 @@ Drop-in replacement:
 
 ```js
 // functions/_shared/recreatex.js (after migration)
-import { ReCreateXClient } from '@recreatex-sdk/core';
-import { SHOP_ID } from '@recreatex-sdk/spacemagic';
+import { ReCreateXClient } from 'recreatex-sdk/core';
+import { SHOP_ID } from 'recreatex-sdk/spacemagic';
 
 export function rxClient(env) {
   return new ReCreateXClient({
@@ -54,7 +54,7 @@ in `routes/{occupancy,live-revenue,gastro-analytics,recreatex-sync}.ts`.
 Replace the entire file with re-exports:
 
 ```ts
-import { ReCreateXClient } from '@recreatex-sdk/core';
+import { ReCreateXClient } from 'recreatex-sdk/core';
 import type { Env } from '../types.js';
 
 export {
@@ -65,7 +65,7 @@ export {
   type OrganisedVisitSaleGuest,
   type OrganisedVisitSaleInfo,
   ymdWindow as defaultSyncWindow,
-} from '@recreatex-sdk/core';
+} from 'recreatex-sdk/core';
 
 export {
   categorizeVisit,
@@ -78,7 +78,7 @@ export {
   type VisitCategory,
   type BookingRow,
   type EscapeRow,
-} from '@recreatex-sdk/spacemagic';
+} from 'recreatex-sdk/spacemagic';
 
 export function rxClient(env: Env) {
   return new ReCreateXClient({
@@ -123,7 +123,7 @@ const sales = await rxClient(c.env).manager.listSalesInformation({ from, until }
 ### `routes/gastro-analytics.ts`
 
 ```ts
-import { gastroGroupName } from '@recreatex-sdk/spacemagic';
+import { gastroGroupName } from 'recreatex-sdk/spacemagic';
 
 const sales = await rxClient(c.env).manager.listSalesInformation({
   from, until, groupByArticleGroup: true,
@@ -146,8 +146,8 @@ The shop hasn't been built yet. Start from the SDK:
 
 ```ts
 // server/api/vouchers.get.ts
-import { ReCreateXClient } from '@recreatex-sdk/core';
-import { SHOP_ID, VOUCHER_SKUS } from '@recreatex-sdk/spacemagic';
+import { ReCreateXClient } from 'recreatex-sdk/core';
+import { SHOP_ID, VOUCHER_SKUS } from 'recreatex-sdk/spacemagic';
 
 export default defineEventHandler(async () => {
   const config = useRuntimeConfig();
@@ -168,9 +168,9 @@ Checkout → PDF flow.
 
 ## Migration order (recommended)
 
-1. **voucher-shop** (greenfield) — proves the SDK against fresh code.
-2. **kpi-dashboard** (highest reuse) — biggest win, biggest test surface.
-3. **birthday-landing-page** (smallest footprint) — easy last step.
+1. **birthday-landing-page** (smallest footprint, JS Pages-Functions) — fastest validation that the SDK runs in Cloudflare Pages-Functions.
+2. **kpi-dashboard** (TS Hono Worker, highest reuse) — biggest win, biggest test surface.
+3. **voucher-shop** (greenfield Nuxt 3) — proves the SDK against fresh code.
 
 ## Roll-back plan
 

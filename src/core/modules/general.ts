@@ -31,8 +31,9 @@ import type { Basket, BasketItem, CheckoutResponse } from '../types/basket.js';
 import { dayRangeDotted } from '../helpers/dates.js';
 
 interface FindAccessZonesResponse {
+  accessZones?: AccessZone[];
   zones?: AccessZone[];
-  result?: { zones?: AccessZone[] };
+  result?: { zones?: AccessZone[]; accessZones?: AccessZone[] };
   succes?: boolean;
   message?: string;
 }
@@ -127,7 +128,13 @@ export class GeneralModule {
       { Criteria },
       callOpts ?? {},
     );
-    return data.zones ?? data.result?.zones ?? [];
+    return (
+      data.accessZones ??
+      data.zones ??
+      data.result?.accessZones ??
+      data.result?.zones ??
+      []
+    );
   }
 
   /** All readers (eCarts, Laser Tag, vending, etc.). */

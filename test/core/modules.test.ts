@@ -67,8 +67,23 @@ describe('ExpositionsModule', () => {
 });
 
 describe('GeneralModule', () => {
+  it('findAccessZones reads `accessZones` (live API field name)', async () => {
+    const { fetch } = fetchSpy({ accessZones: [{ id: 'z1', code: 'X', name: 'X', number: 1 }] });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const zones = await rx.general.findAccessZones({ today: true });
+    expect(zones).toHaveLength(1);
+    expect(zones[0]?.id).toBe('z1');
+  });
+
+  it('findAccessZones falls back to `zones` if API ever shifts', async () => {
+    const { fetch } = fetchSpy({ zones: [{ id: 'z2', code: 'Y', name: 'Y', number: 2 }] });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const zones = await rx.general.findAccessZones({ today: true });
+    expect(zones[0]?.id).toBe('z2');
+  });
+
   it('findAccessZones with today:true sets dotted occupancy range', async () => {
-    const { fetch, calls } = fetchSpy({ zones: [] });
+    const { fetch, calls } = fetchSpy({ accessZones: [] });
     const rx = new ReCreateXClient({ ...baseConfig, fetch });
     await rx.general.findAccessZones({ today: true });
     const body = calls[0]?.body as { Criteria?: { OccupancyFrom?: string; OccupancyUntil?: string } } | null;

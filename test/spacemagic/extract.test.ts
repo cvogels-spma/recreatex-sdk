@@ -10,6 +10,7 @@ import {
   classifyVoucher,
   findVoucher,
   gastroGroupName,
+  isGastroGroup,
 } from '../../src/spacemagic/index.js';
 
 describe('extractKind', () => {
@@ -179,7 +180,17 @@ describe('voucher helpers', () => {
 describe('gastroGroupName', () => {
   it('returns label or original UUID', () => {
     expect(gastroGroupName('cb3c73eb-22ab-ef11-9595-9a21964517de')).toBe('Fingerfood');
+    expect(gastroGroupName('b2bbfab5-1019-f011-9596-b28721114d72')).toBe('Heißgetränke');
     expect(gastroGroupName('unknown-uuid')).toBe('unknown-uuid');
     expect(gastroGroupName(null)).toBe('Unbekannt');
+  });
+});
+
+describe('isGastroGroup', () => {
+  it('separates mapped UUIDs from unmapped', () => {
+    expect(isGastroGroup('cb3c73eb-22ab-ef11-9595-9a21964517de')).toBe(true);
+    expect(isGastroGroup('not-a-real-uuid')).toBe(false);
+    expect(isGastroGroup(null)).toBe(false);
+    expect(isGastroGroup(undefined)).toBe(false);
   });
 });

@@ -85,13 +85,17 @@ interface FindGiftCertificatesResponse {
 }
 
 interface RecalcResponse {
+  basket?: Basket;
+  /** PascalCase fallback for older Recreatex builds. */
   Basket?: Basket;
-  Result?: { BasketValidationResult?: { IsValid?: boolean; Message?: string; brokenRuleName?: string } };
+  result?: { basketValidationResult?: { isValid?: boolean; message?: string; brokenRuleName?: string } };
   succes?: boolean;
   message?: string;
 }
 
 interface LockResponse {
+  lockBasketResult?: { isLocked: boolean; lockExpiry?: string; message?: string };
+  /** PascalCase fallback for older Recreatex builds. */
   LockBasketResult?: { IsLocked: boolean; LockExpiry?: string; Message?: string };
   succes?: boolean;
   message?: string;
@@ -229,10 +233,11 @@ export class GeneralModule {
       { Basket: basket },
       callOpts ?? {},
     );
-    if (!data.Basket) {
+    const out = data.basket ?? data.Basket;
+    if (!out) {
       throw new Error('ReCalculateBasket: no Basket in response');
     }
-    return data.Basket;
+    return out;
   }
 
   /** Lock basket items for the duration of payment. */
@@ -245,12 +250,15 @@ export class GeneralModule {
       { BasketItems: items },
       callOpts ?? {},
     );
-    const r = data.LockBasketResult;
+    const lower = data.lockBasketResult;
+    const upper = data.LockBasketResult;
     const result: { isLocked: boolean; lockExpiry?: string; message?: string } = {
-      isLocked: r?.IsLocked ?? false,
+      isLocked: lower?.isLocked ?? upper?.IsLocked ?? false,
     };
-    if (r?.LockExpiry !== undefined) result.lockExpiry = r.LockExpiry;
-    if (r?.Message !== undefined) result.message = r.Message;
+    const expiry = lower?.lockExpiry ?? upper?.LockExpiry;
+    if (expiry !== undefined) result.lockExpiry = expiry;
+    const msg = lower?.message ?? upper?.Message;
+    if (msg !== undefined) result.message = msg;
     return result;
   }
 
@@ -261,16 +269,16 @@ export class GeneralModule {
    *   `SalesItems[]` (use `SalesItems[].Id` as `SalesLineId` for the
    *   document service).
    */
-  async checkoutBasket(basket: Basket, callOpts?: CallOptions): Promise<CheckoutResponse['Result']> {
+  async checkoutBasket(basket: Basket, callOpts?: CallOptions): Promise<CheckoutResponse['result']> {
     const data = await this.client.post<CheckoutResponse & { succes?: boolean; message?: string }>(
       'Json/General/CheckoutBasket',
       { Basket: basket },
       callOpts ?? {},
     );
-    if (!data.Result) {
-      throw new Error('CheckoutBasket: no Result in response');
+    if (!data.result) {
+      throw new Error('CheckoutBasket: no result in response');
     }
-    return data.Result;
+    return data.result;
   }
 
   // ---- Gift certificates -----------------------------------------------

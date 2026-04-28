@@ -536,27 +536,35 @@ interface Basket {
     /** Catch-all for less-common fields. */
     [extra: string]: unknown;
 }
+/**
+ * Basket validation result.
+ *
+ * The wire payload is camelCase on the way back from Recreatex
+ * (`isValid`, `message`, `brokenRuleName`) — the request side is
+ * PascalCase, but the response is serialised lower-first.
+ */
 interface BasketValidationResult {
-    IsValid: boolean;
-    Message?: string | null;
+    isValid: boolean;
+    message?: string | null;
     brokenRuleName?: string | null;
-    BasketItemValidationResults?: unknown;
+    basketItemValidationResults?: unknown;
 }
 interface CheckoutResult {
-    ResultState: number;
-    SalesOrderNumber: string;
-    SalesSeriesId?: string | null;
-    InvoiceId?: string | null;
-    HasCollectLaterLines?: boolean;
-    TokenNumber?: string | null;
-    BasketValidationResult: BasketValidationResult;
-    SalesItems?: Array<{
-        Id: string;
+    resultState: number;
+    salesOrderNumber: string;
+    salesSeriesId?: string | null;
+    invoiceId?: string | null;
+    hasCollectLaterLines?: boolean;
+    tokenNumber?: string | null;
+    basketValidationResult: BasketValidationResult;
+    salesItems?: Array<{
+        id: string;
+        salesNumber?: number | null;
         [extra: string]: unknown;
     }> | null;
 }
 interface CheckoutResponse {
-    Result: CheckoutResult;
+    result: CheckoutResult;
 }
 
 /**
@@ -618,7 +626,7 @@ declare class GeneralModule {
      *   `SalesItems[]` (use `SalesItems[].Id` as `SalesLineId` for the
      *   document service).
      */
-    checkoutBasket(basket: Basket, callOpts?: CallOptions): Promise<CheckoutResponse['Result']>;
+    checkoutBasket(basket: Basket, callOpts?: CallOptions): Promise<CheckoutResponse['result']>;
     /**
      * Find gift certificates, e.g. by customer or by id. Newest first.
      *

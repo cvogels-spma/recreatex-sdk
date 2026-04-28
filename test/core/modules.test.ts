@@ -91,16 +91,32 @@ describe('GeneralModule', () => {
     expect(body?.Criteria?.OccupancyUntil).toMatch(/^\d{4}-\d{2}-\d{2} 23:59:59\.000$/);
   });
 
-  it('checkoutBasket throws RecreatexApiError on IsValid:false', async () => {
+  it('checkoutBasket throws RecreatexApiError on isValid:false (camelCase)', async () => {
     const { fetch } = fetchSpy({
-      Result: {
-        BasketValidationResult: { IsValid: false, Message: 'MissingCustomer' },
+      result: {
+        basketValidationResult: { isValid: false, message: 'MissingCustomer' },
       },
     });
     const rx = new ReCreateXClient({ ...baseConfig, fetch });
     await expect(
       rx.general.checkoutBasket({ CustomerId: '0', Items: [] }),
     ).rejects.toThrowError(/MissingCustomer/);
+  });
+
+  it('checkoutBasket returns the camelCase result envelope', async () => {
+    const { fetch } = fetchSpy({
+      result: {
+        resultState: 0,
+        salesOrderNumber: 'SO-123',
+        salesSeriesId: 'series-1',
+        basketValidationResult: { isValid: true },
+        salesItems: [{ id: 'line-1', salesNumber: 5 }],
+      },
+    });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const r = await rx.general.checkoutBasket({ CustomerId: 'cust', Items: [] });
+    expect(r.salesOrderNumber).toBe('SO-123');
+    expect(r.salesItems?.[0]?.id).toBe('line-1');
   });
 
   it('findGiftCertificates reads `findGiftCertificatesResult.giftCertificates`', async () => {

@@ -199,18 +199,27 @@ function assertOk<T extends RecreatexEnvelope>(data: T, endpoint: string): asser
       const message = (data as { message?: string }).message ?? 'unknown error';
       throw new RecreatexApiError(message, endpoint, data);
     }
-    const result = (data as { Result?: { BasketValidationResult?: { IsValid?: boolean; Message?: string; brokenRuleName?: string } } }).Result;
-    const validation = result?.BasketValidationResult;
-    if (validation && validation.IsValid === false) {
-      const opts = validation.brokenRuleName !== undefined && validation.brokenRuleName !== null
-        ? { brokenRuleName: validation.brokenRuleName }
-        : undefined;
-      throw new RecreatexApiError(
-        validation.Message ?? validation.brokenRuleName ?? 'basket validation failed',
-        endpoint,
-        data,
-        opts,
-      );
+    // Recreatex returns checkout/recalc envelopes as camelCase
+    // (`result.basketValidationResult.isValid`); older builds
+    // sometimes serialise PascalCase. Accept both.
+    const lowerResult = (data as {
+      result?: { basketValidationResult?: { isValid?: boolean; message?: string; brokenRuleName?: string } };
+    }).result;
+    const upperResult = (data as {
+      Result?: { BasketValidationResult?: { IsValid?: boolean; Message?: string; brokenRuleName?: string } };
+    }).Result;
+    const lowerVal = lowerResult?.basketValidationResult;
+    const upperVal = upperResult?.BasketValidationResult;
+    const isValid = lowerVal?.isValid ?? upperVal?.IsValid;
+    if (isValid === false) {
+      const brokenRuleName = lowerVal?.brokenRuleName ?? upperVal?.brokenRuleName;
+      const message =
+        lowerVal?.message ?? upperVal?.Message ?? brokenRuleName ?? 'basket validation failed';
+      const opts =
+        brokenRuleName !== undefined && brokenRuleName !== null
+          ? { brokenRuleName }
+          : undefined;
+      throw new RecreatexApiError(message, endpoint, data, opts);
     }
   }
 }

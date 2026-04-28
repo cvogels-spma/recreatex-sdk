@@ -495,10 +495,11 @@ var GeneralModule = class {
       { Basket: basket },
       callOpts ?? {}
     );
-    if (!data.Basket) {
+    const out = data.basket ?? data.Basket;
+    if (!out) {
       throw new Error("ReCalculateBasket: no Basket in response");
     }
-    return data.Basket;
+    return out;
   }
   /** Lock basket items for the duration of payment. */
   async lockBasketItems(items, callOpts) {
@@ -507,12 +508,15 @@ var GeneralModule = class {
       { BasketItems: items },
       callOpts ?? {}
     );
-    const r = data.LockBasketResult;
+    const lower = data.lockBasketResult;
+    const upper = data.LockBasketResult;
     const result = {
-      isLocked: r?.IsLocked ?? false
+      isLocked: lower?.isLocked ?? upper?.IsLocked ?? false
     };
-    if (r?.LockExpiry !== void 0) result.lockExpiry = r.LockExpiry;
-    if (r?.Message !== void 0) result.message = r.Message;
+    const expiry = lower?.lockExpiry ?? upper?.LockExpiry;
+    if (expiry !== void 0) result.lockExpiry = expiry;
+    const msg = lower?.message ?? upper?.Message;
+    if (msg !== void 0) result.message = msg;
     return result;
   }
   /**
@@ -528,10 +532,10 @@ var GeneralModule = class {
       { Basket: basket },
       callOpts ?? {}
     );
-    if (!data.Result) {
-      throw new Error("CheckoutBasket: no Result in response");
+    if (!data.result) {
+      throw new Error("CheckoutBasket: no result in response");
     }
-    return data.Result;
+    return data.result;
   }
   // ---- Gift certificates -----------------------------------------------
   /**
@@ -776,16 +780,16 @@ function assertOk(data, endpoint) {
       const message = data.message ?? "unknown error";
       throw new RecreatexApiError(message, endpoint, data);
     }
-    const result = data.Result;
-    const validation = result?.BasketValidationResult;
-    if (validation && validation.IsValid === false) {
-      const opts = validation.brokenRuleName !== void 0 && validation.brokenRuleName !== null ? { brokenRuleName: validation.brokenRuleName } : void 0;
-      throw new RecreatexApiError(
-        validation.Message ?? validation.brokenRuleName ?? "basket validation failed",
-        endpoint,
-        data,
-        opts
-      );
+    const lowerResult = data.result;
+    const upperResult = data.Result;
+    const lowerVal = lowerResult?.basketValidationResult;
+    const upperVal = upperResult?.BasketValidationResult;
+    const isValid = lowerVal?.isValid ?? upperVal?.IsValid;
+    if (isValid === false) {
+      const brokenRuleName = lowerVal?.brokenRuleName ?? upperVal?.brokenRuleName;
+      const message = lowerVal?.message ?? upperVal?.Message ?? brokenRuleName ?? "basket validation failed";
+      const opts = brokenRuleName !== void 0 && brokenRuleName !== null ? { brokenRuleName } : void 0;
+      throw new RecreatexApiError(message, endpoint, data, opts);
     }
   }
 }

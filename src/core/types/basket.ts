@@ -150,24 +150,31 @@ export interface Basket {
   [extra: string]: unknown;
 }
 
+/**
+ * Basket validation result.
+ *
+ * The wire payload is camelCase on the way back from Recreatex
+ * (`isValid`, `message`, `brokenRuleName`) — the request side is
+ * PascalCase, but the response is serialised lower-first.
+ */
 export interface BasketValidationResult {
-  IsValid: boolean;
-  Message?: string | null;
+  isValid: boolean;
+  message?: string | null;
   brokenRuleName?: string | null;
-  BasketItemValidationResults?: unknown;
+  basketItemValidationResults?: unknown;
 }
 
 export interface CheckoutResult {
-  ResultState: number;
-  SalesOrderNumber: string;
-  SalesSeriesId?: string | null;
-  InvoiceId?: string | null;
-  HasCollectLaterLines?: boolean;
-  TokenNumber?: string | null;
-  BasketValidationResult: BasketValidationResult;
-  SalesItems?: Array<{ Id: string; [extra: string]: unknown }> | null;
+  resultState: number;
+  salesOrderNumber: string;
+  salesSeriesId?: string | null;
+  invoiceId?: string | null;
+  hasCollectLaterLines?: boolean;
+  tokenNumber?: string | null;
+  basketValidationResult: BasketValidationResult;
+  salesItems?: Array<{ id: string; salesNumber?: number | null; [extra: string]: unknown }> | null;
 }
 
 export interface CheckoutResponse {
-  Result: CheckoutResult;
+  result: CheckoutResult;
 }

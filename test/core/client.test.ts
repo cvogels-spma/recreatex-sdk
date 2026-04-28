@@ -50,15 +50,15 @@ describe('ReCreateXClient', () => {
     await expect(rx.post('Json/Foo/Bar', {})).rejects.toBeInstanceOf(RecreatexApiError);
   });
 
-  it('throws RecreatexApiError when basket validation fails', async () => {
+  it('throws RecreatexApiError when basket validation fails (camelCase)', async () => {
     const fetch = mockFetch(
       async () =>
         new Response(
           JSON.stringify({
-            Result: {
-              BasketValidationResult: {
-                IsValid: false,
-                Message: 'Article null',
+            result: {
+              basketValidationResult: {
+                isValid: false,
+                message: 'Article null',
                 brokenRuleName: 'ArticleRequired',
               },
             },
@@ -76,6 +76,25 @@ describe('ReCreateXClient', () => {
         expect(err.brokenRuleName).toBe('ArticleRequired');
       }
     }
+  });
+
+  it('throws RecreatexApiError when basket validation fails (PascalCase fallback)', async () => {
+    const fetch = mockFetch(
+      async () =>
+        new Response(
+          JSON.stringify({
+            Result: {
+              BasketValidationResult: {
+                IsValid: false,
+                Message: 'MissingCustomer',
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    await expect(rx.post('Json/General/CheckoutBasket', {})).rejects.toThrowError(/MissingCustomer/);
   });
 
   it('retries on 502 and succeeds on the second attempt', async () => {

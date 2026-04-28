@@ -102,6 +102,54 @@ describe('GeneralModule', () => {
       rx.general.checkoutBasket({ CustomerId: '0', Items: [] }),
     ).rejects.toThrowError(/MissingCustomer/);
   });
+
+  it('findGiftCertificates reads `findGiftCertificatesResult.giftCertificates`', async () => {
+    const cert = {
+      id: 'gc-1',
+      number: null,
+      amount: 25,
+      purchaseDate: '2026-04-20',
+      salesSeriesID: 'ss-1',
+      shortName: 'GIFT25',
+      description: 'Gutschein 25 €',
+      ticketDescription: 'Gutschein 25 €',
+      extraDescription: 'für Lisa',
+      validFrom: '2026-04-20',
+      validTill: '2029-04-20',
+      printDate: null,
+    };
+    const { fetch, calls } = fetchSpy({
+      findGiftCertificatesResult: { giftCertificates: [cert] },
+    });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const certs = await rx.general.findGiftCertificates({
+      customerId: 'cust-1',
+      pageSize: 50,
+    });
+    expect(certs).toHaveLength(1);
+    expect(certs[0]?.id).toBe('gc-1');
+    const body = calls[0]?.body as { Criteria?: Record<string, unknown> } | null;
+    expect(body?.Criteria?.CustomerId).toBe('cust-1');
+    expect(body?.Criteria?.Paging).toMatchObject({ PageIndex: 0, PageSize: 50 });
+  });
+
+  it('findGiftCertificates falls back to a flat `giftCertificates` field', async () => {
+    const { fetch } = fetchSpy({
+      giftCertificates: [{ id: 'gc-2', number: '12345', amount: 50, purchaseDate: null, salesSeriesID: null, shortName: null, description: null, ticketDescription: null, extraDescription: null, validFrom: null, validTill: null, printDate: null }],
+    });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const certs = await rx.general.findGiftCertificates({ id: 'gc-2' });
+    expect(certs[0]?.id).toBe('gc-2');
+  });
+
+  it('setGiftCertificatePrinted sends Criteria.Id and resolves', async () => {
+    const { fetch, calls } = fetchSpy({});
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    await rx.general.setGiftCertificatePrinted('gc-1');
+    const body = calls[0]?.body as { Criteria?: Record<string, unknown> } | null;
+    expect(body?.Criteria?.Id).toBe('gc-1');
+    expect(calls[0]?.url).toMatch(/Json\/General\/SetGiftCertificatePrinted\/$/);
+  });
 });
 
 describe('ManagerModule', () => {

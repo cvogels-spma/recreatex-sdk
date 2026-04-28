@@ -370,6 +370,38 @@ interface FindSalesCriteria {
     pointOfSaleId?: string;
     divisionId?: string;
 }
+/**
+ * A single gift-certificate record as returned by `FindGiftCertificates`.
+ *
+ * Heads-up: `number` is typically null for a freshly-created certificate
+ * (the PersonCard isn't populated yet). The visible voucher code lives in
+ * the DocumentService PDF — use this record only to discover the
+ * GiftCertificate `id` (for `SetGiftCertificatePrinted`) or to match a
+ * cert via `salesSeriesID` to a CheckoutBasket result.
+ */
+interface GiftCertificate {
+    id: string;
+    number: string | null;
+    amount: number | null;
+    purchaseDate: string | null;
+    salesSeriesID: string | null;
+    shortName: string | null;
+    description: string | null;
+    ticketDescription: string | null;
+    extraDescription: string | null;
+    validFrom: string | null;
+    validTill: string | null;
+    /** ISO timestamp once SetGiftCertificatePrinted has fired; otherwise null. */
+    printDate: string | null;
+}
+interface FindGiftCertificatesCriteria {
+    /** Recreatex Person GUID — typically the customer who placed the order. */
+    customerId?: string;
+    id?: string;
+    number?: string;
+    pageIndex?: number;
+    pageSize?: number;
+}
 
 /**
  * Basket types — used by `ReCalculateBasket`, `LockBasketItems`,
@@ -587,6 +619,22 @@ declare class GeneralModule {
      *   document service).
      */
     checkoutBasket(basket: Basket, callOpts?: CallOptions): Promise<CheckoutResponse['Result']>;
+    /**
+     * Find gift certificates, e.g. by customer or by id. Newest first.
+     *
+     * @example
+     *   const certs = await client.general.findGiftCertificates({
+     *     customerId: GUEST_CUSTOMER_ID, pageSize: 20,
+     *   });
+     *   const cert = certs.find((c) => c.salesSeriesID === checkoutResult.SalesSeriesId);
+     */
+    findGiftCertificates(criteria: FindGiftCertificatesCriteria, callOpts?: CallOptions): Promise<GiftCertificate[]>;
+    /**
+     * Mark a gift certificate as printed/delivered. Recreatex sets `printDate`
+     * on the cert. Best-effort — if it fails, the voucher is still valid; the
+     * back-office staff can reprint.
+     */
+    setGiftCertificatePrinted(giftCertificateId: string, callOpts?: CallOptions): Promise<void>;
 }
 
 /**
@@ -904,4 +952,4 @@ declare function ymdWindow(before: number, after: number, today?: Date, tz?: str
     untilYmd: Ymd;
 };
 
-export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type AnonymousPerson, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleSaleItem, type ArticleVat, ArticlesModule, type Basket, type BasketItem, type BasketPayment, type BasketTypeString, BasketTypeStrings, type BasketValidationResult, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, type CheckoutResponse, type CheckoutResult, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, type ExpositionPeriodReservationItem, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, FindOrganisedVisitsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, type OrganisedVisitRebookingItem, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type AnonymousPerson, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleSaleItem, type ArticleVat, ArticlesModule, type Basket, type BasketItem, type BasketPayment, type BasketTypeString, BasketTypeStrings, type BasketValidationResult, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, type CheckoutResponse, type CheckoutResult, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, type ExpositionPeriodReservationItem, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, type OrganisedVisitRebookingItem, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };

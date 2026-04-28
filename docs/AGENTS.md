@@ -43,6 +43,7 @@ For Space Magic the canonical IDs are exported as
 | `ListSalesInformation.amount` ≠ cash flow | It's the gross booking value; pre-payments inflate it. |
 | Apply-rebook endpoint missing | Not in the JSON docs. Use `cancelOrganisedVisit + rebuy` until Lukas Goetz confirms the `$type` for `OrganisedVisitRebooking` in `CheckoutBasket`. |
 | `data.succes` typo | The Recreatex API spells it `succes` (single-s). Don't "fix" it. |
+| Just-created GiftCertificate has `number: null` | Recreatex hasn't populated the PersonCard yet. The visible voucher code is in the DocumentService PDF; use `findGiftCertificates` only for `id` lookup or `salesSeriesID` matching. |
 
 ## Two date formats
 

@@ -26,6 +26,8 @@ import type {
   FindPersonCriteria,
   Sale,
   FindSalesCriteria,
+  GiftCertificate,
+  FindGiftCertificatesCriteria,
 } from '../types/general.js';
 import type { Basket, BasketItem, CheckoutResponse } from '../types/basket.js';
 import { dayRangeDotted } from '../helpers/dates.js';
@@ -71,6 +73,13 @@ interface FindPersonResponse {
 
 interface FindSalesResponse {
   sales?: Sale[];
+  succes?: boolean;
+  message?: string;
+}
+
+interface FindGiftCertificatesResponse {
+  findGiftCertificatesResult?: { giftCertificates?: GiftCertificate[] };
+  giftCertificates?: GiftCertificate[];
   succes?: boolean;
   message?: string;
 }
@@ -262,5 +271,58 @@ export class GeneralModule {
       throw new Error('CheckoutBasket: no Result in response');
     }
     return data.Result;
+  }
+
+  // ---- Gift certificates -----------------------------------------------
+
+  /**
+   * Find gift certificates, e.g. by customer or by id. Newest first.
+   *
+   * @example
+   *   const certs = await client.general.findGiftCertificates({
+   *     customerId: GUEST_CUSTOMER_ID, pageSize: 20,
+   *   });
+   *   const cert = certs.find((c) => c.salesSeriesID === checkoutResult.SalesSeriesId);
+   */
+  async findGiftCertificates(
+    criteria: FindGiftCertificatesCriteria,
+    callOpts?: CallOptions,
+  ): Promise<GiftCertificate[]> {
+    const Criteria: Record<string, unknown> = {
+      Paging: {
+        PageIndex: criteria.pageIndex ?? 0,
+        PageSize: criteria.pageSize ?? 20,
+      },
+    };
+    if (criteria.customerId) Criteria.CustomerId = criteria.customerId;
+    if (criteria.id) Criteria.Id = criteria.id;
+    if (criteria.number) Criteria.Number = criteria.number;
+
+    const data = await this.client.post<FindGiftCertificatesResponse>(
+      'Json/General/FindGiftCertificates',
+      { Criteria },
+      callOpts ?? {},
+    );
+    return (
+      data.findGiftCertificatesResult?.giftCertificates ??
+      data.giftCertificates ??
+      []
+    );
+  }
+
+  /**
+   * Mark a gift certificate as printed/delivered. Recreatex sets `printDate`
+   * on the cert. Best-effort — if it fails, the voucher is still valid; the
+   * back-office staff can reprint.
+   */
+  async setGiftCertificatePrinted(
+    giftCertificateId: string,
+    callOpts?: CallOptions,
+  ): Promise<void> {
+    await this.client.post(
+      'Json/General/SetGiftCertificatePrinted',
+      { Criteria: { Id: giftCertificateId } },
+      callOpts ?? {},
+    );
   }
 }

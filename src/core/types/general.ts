@@ -147,3 +147,39 @@ export interface FindSalesCriteria {
   pointOfSaleId?: string;
   divisionId?: string;
 }
+
+// ---- Gift certificates --------------------------------------------------
+
+/**
+ * A single gift-certificate record as returned by `FindGiftCertificates`.
+ *
+ * Heads-up: `number` is typically null for a freshly-created certificate
+ * (the PersonCard isn't populated yet). The visible voucher code lives in
+ * the DocumentService PDF — use this record only to discover the
+ * GiftCertificate `id` (for `SetGiftCertificatePrinted`) or to match a
+ * cert via `salesSeriesID` to a CheckoutBasket result.
+ */
+export interface GiftCertificate {
+  id: string;
+  number: string | null;
+  amount: number | null;
+  purchaseDate: string | null;
+  salesSeriesID: string | null;
+  shortName: string | null;
+  description: string | null;
+  ticketDescription: string | null;
+  extraDescription: string | null;
+  validFrom: string | null;
+  validTill: string | null;
+  /** ISO timestamp once SetGiftCertificatePrinted has fired; otherwise null. */
+  printDate: string | null;
+}
+
+export interface FindGiftCertificatesCriteria {
+  /** Recreatex Person GUID — typically the customer who placed the order. */
+  customerId?: string;
+  id?: string;
+  number?: string;
+  pageIndex?: number;
+  pageSize?: number;
+}

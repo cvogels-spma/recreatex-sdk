@@ -533,6 +533,45 @@ var GeneralModule = class {
     }
     return data.Result;
   }
+  // ---- Gift certificates -----------------------------------------------
+  /**
+   * Find gift certificates, e.g. by customer or by id. Newest first.
+   *
+   * @example
+   *   const certs = await client.general.findGiftCertificates({
+   *     customerId: GUEST_CUSTOMER_ID, pageSize: 20,
+   *   });
+   *   const cert = certs.find((c) => c.salesSeriesID === checkoutResult.SalesSeriesId);
+   */
+  async findGiftCertificates(criteria, callOpts) {
+    const Criteria = {
+      Paging: {
+        PageIndex: criteria.pageIndex ?? 0,
+        PageSize: criteria.pageSize ?? 20
+      }
+    };
+    if (criteria.customerId) Criteria.CustomerId = criteria.customerId;
+    if (criteria.id) Criteria.Id = criteria.id;
+    if (criteria.number) Criteria.Number = criteria.number;
+    const data = await this.client.post(
+      "Json/General/FindGiftCertificates",
+      { Criteria },
+      callOpts ?? {}
+    );
+    return data.findGiftCertificatesResult?.giftCertificates ?? data.giftCertificates ?? [];
+  }
+  /**
+   * Mark a gift certificate as printed/delivered. Recreatex sets `printDate`
+   * on the cert. Best-effort — if it fails, the voucher is still valid; the
+   * back-office staff can reprint.
+   */
+  async setGiftCertificatePrinted(giftCertificateId, callOpts) {
+    await this.client.post(
+      "Json/General/SetGiftCertificatePrinted",
+      { Criteria: { Id: giftCertificateId } },
+      callOpts ?? {}
+    );
+  }
 };
 
 // src/core/modules/manager.ts

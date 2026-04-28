@@ -30,6 +30,8 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `general` | `reCalculateBasket(basket)` | `/Json/General/ReCalculateBasket/` | Basket totals |
 | `general` | `lockBasketItems(items)` | `/Json/General/LockBasketItems/` | Reserve items for payment |
 | `general` | `checkoutBasket(basket)` | `/Json/General/CheckoutBasket/` | Finalise sale |
+| `general` | `findGiftCertificates(criteria)` | `/Json/General/FindGiftCertificates/` | Look up gift certificates by customer / id / number |
+| `general` | `setGiftCertificatePrinted(id)` | `/Json/General/SetGiftCertificatePrinted/` | Mark a cert as delivered (sets `printDate`) |
 | `manager` | `listSalesInformation(criteria)` | `/Json/ManagerApp/ListSalesInformation/` | Aggregated revenue |
 | `manager` | `listVisitingCustomersInformation(criteria)` | `/Json/ManagerApp/ListVisitingCustomersInformation/` | Visitor scans |
 | `documents` | `giftCertificatePdf({ salesLineId })` | `/WebShopDocumentService.svc/GiftCertificates/{ShopId}/{lang}/{SalesLineId}` | Voucher PDF |

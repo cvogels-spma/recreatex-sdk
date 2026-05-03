@@ -189,6 +189,126 @@ function mapEscapeBooking(visit) {
   };
 }
 
-export { DIVISION_IDS, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, mapBirthdayBooking, mapEscapeBooking };
+// src/core/types/basket.ts
+var BCT = "ReCreateX.WebShop.WebServices.Contracts";
+var SUFFIX = `, ${BCT}`;
+var BasketTypeStrings = {
+  // ---- Basket items (sales) ----
+  ArticleSale: `${BCT}.ArticleSale${SUFFIX}`,
+  ExpositionPeriodReservation: `${BCT}.ExpositionPeriodReservation${SUFFIX}`,
+  // ---- Payments ----
+  BasketPayment: `${BCT}.BasketPayment${SUFFIX}`};
+
+// src/core/context.ts
+function uuidv4() {
+  const g = globalThis;
+  if (g.crypto?.randomUUID) return g.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (g.crypto?.getRandomValues) {
+    g.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = bytes[6] & 15 | 64;
+  bytes[8] = bytes[8] & 63 | 128;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
+}
+
+// src/spacemagic/birthday.ts
+var ZERO_GUID = "00000000-0000-0000-0000-000000000000";
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+function buildBirthdayBasket(input) {
+  const divisionId = input.divisionId ?? DIVISION_IDS.spaceMagic;
+  const customerId = input.customerId ?? GUEST_CUSTOMER_ID;
+  const paymentMethodId = input.paymentMethodId ?? PAYMENT_METHOD_ID_KARTENZAHLUNG;
+  const extras = input.extras ?? [];
+  const depositAmount = round2(input.depositAmount);
+  const grossTotal = round2(input.grossTotal);
+  const balance = round2(grossTotal - depositAmount);
+  const ENTRY_TYPE = "ReCreateX.WebShop.WebServices.Contracts.ExpositionPeriodReservationEntry, ReCreateX.WebShop.WebServices.Contracts";
+  const entries = [
+    {
+      $type: ENTRY_TYPE,
+      PriceGroupId: input.priceTier.priceGroupId,
+      ParticipantCount: input.paidGuests,
+      Participants: [],
+      Cards: [],
+      CustomerCardUsages: [],
+      PromotionRuleDiscountAmount: 0
+    }
+  ];
+  const periodReservation = {
+    $type: BasketTypeStrings.ExpositionPeriodReservation,
+    Id: uuidv4(),
+    DivisionId: divisionId,
+    ExpositionId: input.expositionId,
+    ExpositionPeriodId: input.expositionPeriodId,
+    Quantity: 0,
+    UnitPrice: input.priceTier.unitPrice,
+    Entries: entries,
+    Comments: input.comment ?? null,
+    OrderWithoutPayment: false,
+    AsReseller: false,
+    PromotionRuleDiscountAmount: 0,
+    CustomerContactId: ZERO_GUID
+  };
+  const items = [periodReservation];
+  for (const extra of extras) {
+    const qty = extra.quantity ?? 1;
+    items.push({
+      $type: BasketTypeStrings.ArticleSale,
+      Id: uuidv4(),
+      DivisionId: divisionId,
+      Article: { Id: extra.articleId },
+      Quantity: qty,
+      UnitPrice: extra.unitPrice,
+      CustomPrice: extra.unitPrice,
+      ExtraDescription: extra.extraDescription ?? "",
+      AsReseller: false,
+      PromotionRuleDiscountAmount: 0,
+      CustomerContactId: ZERO_GUID
+    });
+  }
+  const payment = {
+    $type: BasketTypeStrings.BasketPayment,
+    Amount: depositAmount,
+    Currency: "EUR",
+    PaymentMethodId: paymentMethodId,
+    ExtraInfo1: "Mollie",
+    ExtraInfo2: input.molliePaymentId,
+    OrderId: input.orderNumber,
+    TrxId: input.molliePaymentId,
+    PayId: ""
+  };
+  const anon = {
+    Name: input.buyer.lastName,
+    FirstName: input.buyer.firstName,
+    Email: input.buyer.email,
+    Telephone: input.buyer.phone ?? null,
+    Street1: input.buyer.street ?? null,
+    ZipCode: input.buyer.zipCode ?? null,
+    Home: input.buyer.city ?? null,
+    Country: input.buyer.country ?? null,
+    Newsletter: false
+  };
+  return {
+    CustomerId: customerId,
+    Items: items,
+    Payments: [payment],
+    AnonymousPerson: anon,
+    OrderId: input.orderNumber,
+    TrxId: input.molliePaymentId,
+    PayId: "",
+    PayLater: false,
+    Balance: balance,
+    Comment: input.comment ?? "",
+    CouponCodes: []
+  };
+}
+
+export { DIVISION_IDS, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, mapBirthdayBooking, mapEscapeBooking };
 //# sourceMappingURL=spacemagic.js.map
 //# sourceMappingURL=spacemagic.js.map

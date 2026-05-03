@@ -44,6 +44,12 @@ For Space Magic the canonical IDs are exported as
 | Apply-rebook endpoint missing | Not in the JSON docs. Use `cancelOrganisedVisit + rebuy` until Lukas Goetz confirms the `$type` for `OrganisedVisitRebooking` in `CheckoutBasket`. |
 | `data.succes` typo | The Recreatex API spells it `succes` (single-s). Don't "fix" it. |
 | Just-created GiftCertificate has `number: null` | Recreatex hasn't populated the PersonCard yet. The visible voucher code is in the DocumentService PDF; use `findGiftCertificates` only for `id` lookup or `salesSeriesID` matching. |
+| `findOverviewByDay` is missing the period id | Verified: `FindExpositionOverviewByDay` only carries `from / until / occupancy / prices`. Use `expositions.listPeriods(id, fromIso, untilIso)` to obtain the addressable `ExpositionPeriodId`. |
+| `ExpositionPeriodReservation.Quantity` rejected | Recreatex: "Quantity is not supported For ExpositionPeriodReservation. Use ExpositionPeriodReservationEntry instead." — set outer `Quantity: 0`, carry the seat count on `Entries[].ParticipantCount`. |
+| Entry field names — `Quantity` / `Visitors` are wrong | The actual fields are `ParticipantCount` + `Participants` (NOT `Quantity` / `Visitors`). Verified via the validator's echo. Send `Participants: []` (empty array, not undefined) for webshop / `askNames: false` expositions. |
+| `OrganisedVisitValidPriceGroupsRule` despite a valid-looking PriceGroupId | The "real" `PriceGroupId` is `prices[].group.id` from `Expositions/FindExpositions(Includes.Pricing=true)`. The field that `FindExpositionOverviewByDay` returns under the name `priceGroupId` is actually a **price id** (= `prices[].id`) and is rejected by the basket validator. |
+| `ExpositionPeriodReservation` checkout fails with "Die Ausstellungsreservierung muss gesperrt sein" | Required pre-step: `General/LockBasketItems` returns the same items with a fresh `LockTicket` (~10 min expiry). Inject the locked items into the basket before `CheckoutBasket`. The `buildBirthdayBasket` helper does NOT lock — wrap the call yourself or use the higher-level wrapper in `space-magic-birthday-landing-page/functions/_shared/recreatex.js#createBirthdayOrganisedVisit`. |
+| 50 % deposit not visible as "open balance" | Set `Basket.Payments[0].Amount = depositAmount`, `Basket.Balance = grossTotal - depositAmount`, leave `Basket.PayLater = false`. Recreatex echoes the deposit back as `advancementPrice` on the locked item and shows the rest as a remaining balance on the OrganisedVisit. |
 
 ## Two date formats
 

@@ -5,10 +5,16 @@
  *  - `Expositions/FindExpositions`               → room/exposition catalogue
  *  - `Expositions/FindExpositionPeriodDates`     → free days in a window
  *  - `Expositions/FindExpositionOverviewByDay`   → slots + capacity for a day
+ *  - `Expositions/ListExpositionPeriods`         → addressable Period IDs (used to build `ExpositionPeriodReservation` baskets)
  *  - `Expositions/FindOrganisedVisits`           → list bookings (paginated)
  *  - `Expositions/AdjustOrganisedVisit`          → change quantities of an existing visit
  *  - `Expositions/CancelOrganisedVisit`          → cancel + refund prep
  *  - `Expositions/GetOrganisedVisitRebookingCosts` → preview slot-change cost delta
+ *
+ *  ⚠ `findOverviewByDay` does NOT include the period `id` — it only carries
+ *  `from / until / occupancy / prices`. Use {@link ExpositionsModule.listPeriods}
+ *  to obtain the addressable `ExpositionPeriodId` you need for a
+ *  `ExpositionPeriodReservation` basket item.
  *
  *  ⚠ The "apply rebook" endpoint is not exposed as a JSON endpoint at the
  *  time of writing. The CheckoutBasket flow with an OrganisedVisitRebooking
@@ -20,6 +26,7 @@ import type { ReCreateXClient, CallOptions } from '../client.js';
 import type {
   Exposition,
   ExpositionPeriodDate,
+  ExpositionPeriodRef,
   ExpositionDayOverview,
   OrganisedVisit,
   FindOrganisedVisitsCriteria,
@@ -46,6 +53,12 @@ interface FindExpositionPeriodDatesResponse {
 
 interface FindExpositionOverviewByDayResponse {
   validateExpositionSubscriptionItemResult?: ExpositionDayOverview[];
+  succes?: boolean;
+  message?: string;
+}
+
+interface ListExpositionPeriodsResponse {
+  expositionPeriods?: ExpositionPeriodRef[];
   succes?: boolean;
   message?: string;
 }
@@ -150,6 +163,42 @@ export class ExpositionsModule {
       callOpts ?? {},
     );
     return data.validateExpositionSubscriptionItemResult ?? [];
+  }
+
+  /**
+   * Addressable Period entries (carries the `id` you need for an
+   * `ExpositionPeriodReservation` basket item).
+   *
+   *  ⚠ Use this and NOT {@link findOverviewByDay} when you need to
+   *  build a checkout basket — `findOverviewByDay` does not include
+   *  the period id.
+   *
+   * @param expositionId — the Exposition GUID.
+   * @param fromIso — ISO datetime, e.g. `'2026-05-07T00:00:00'`.
+   * @param untilIso — ISO datetime, e.g. `'2026-05-07T23:59:59'`.
+   *
+   * @example
+   *   const periods = await client.expositions.listPeriods(
+   *     'c9b017fe-fafc-ef11-9596-b28721114d72',
+   *     '2026-05-07T00:00:00', '2026-05-07T23:59:59',
+   *   );
+   *   const slot = periods.find((p) => p.from === '2026-05-07T14:00:00');
+   *   // → slot.id is the ExpositionPeriodId
+   */
+  async listPeriods(
+    expositionId: string,
+    fromIso: string,
+    untilIso: string,
+    callOpts?: CallOptions,
+  ): Promise<ExpositionPeriodRef[]> {
+    const data = await this.client.post<ListExpositionPeriodsResponse>(
+      'Json/Expositions/ListExpositionPeriods',
+      {
+        SearchCriteria: { ExpositionId: expositionId, From: fromIso, Until: untilIso },
+      },
+      callOpts ?? {},
+    );
+    return data.expositionPeriods ?? [];
   }
 
   /**

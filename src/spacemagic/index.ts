@@ -14,3 +14,4 @@ export * from './ids.js';
 export * from './vouchers.js';
 export * from './gastro.js';
 export * from './visits/index.js';
+export * from './birthday.js';

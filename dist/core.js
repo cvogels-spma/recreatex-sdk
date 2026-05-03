@@ -282,6 +282,36 @@ var ExpositionsModule = class {
     return data.validateExpositionSubscriptionItemResult ?? [];
   }
   /**
+   * Addressable Period entries (carries the `id` you need for an
+   * `ExpositionPeriodReservation` basket item).
+   *
+   *  ⚠ Use this and NOT {@link findOverviewByDay} when you need to
+   *  build a checkout basket — `findOverviewByDay` does not include
+   *  the period id.
+   *
+   * @param expositionId — the Exposition GUID.
+   * @param fromIso — ISO datetime, e.g. `'2026-05-07T00:00:00'`.
+   * @param untilIso — ISO datetime, e.g. `'2026-05-07T23:59:59'`.
+   *
+   * @example
+   *   const periods = await client.expositions.listPeriods(
+   *     'c9b017fe-fafc-ef11-9596-b28721114d72',
+   *     '2026-05-07T00:00:00', '2026-05-07T23:59:59',
+   *   );
+   *   const slot = periods.find((p) => p.from === '2026-05-07T14:00:00');
+   *   // → slot.id is the ExpositionPeriodId
+   */
+  async listPeriods(expositionId, fromIso, untilIso, callOpts) {
+    const data = await this.client.post(
+      "Json/Expositions/ListExpositionPeriods",
+      {
+        SearchCriteria: { ExpositionId: expositionId, From: fromIso, Until: untilIso }
+      },
+      callOpts ?? {}
+    );
+    return data.expositionPeriods ?? [];
+  }
+  /**
    * Fetch a single page of OrganisedVisits.
    *
    *  ⚠ The `From`/`Until` filter applies to `purchaseDate`, NOT `startDate`.

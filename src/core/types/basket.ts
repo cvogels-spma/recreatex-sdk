@@ -72,12 +72,60 @@ export interface ArticleSaleItem extends BasketItemBase {
   ExtraDescription?: string | null;
 }
 
+/**
+ * A "ticket" within an `ExpositionPeriodReservation`. Pins a count of
+ * participants to a specific `PriceGroupId` (e.g. "Partypaket - Space"
+ * 29 € vs. "Partypaket - Magic" 34 € on the Geburtstagstisch
+ * exposition).
+ *
+ * ⚠ Verified live 2026-05-04: the field names are
+ *   `ParticipantCount` + `Participants[]` (NOT `Quantity` / `Visitors`).
+ *
+ * ⚠ `PriceGroupId` must be `prices[].group.id` from
+ *   `Expositions/FindExpositions(Includes.Pricing=true)`, NOT
+ *   `prices[].id` (the latter is what `FindExpositionOverviewByDay`
+ *   confusingly labels as `priceGroupId` — that's actually a price id).
+ */
+export interface ExpositionPeriodReservationEntry {
+  /** Discriminator. */
+  $type?: string;
+  /** GUID — `prices[].group.id`, NOT `prices[].id`. */
+  PriceGroupId: string;
+  /** Number of seats / kids in this price tier. */
+  ParticipantCount: number;
+  /** Visitor records (empty array for webshop / `askNames: false`). */
+  Participants?: unknown[];
+  Cards?: unknown[];
+  CustomerCardUsages?: unknown[];
+  /** Server-computed; passing it as a hint is harmless. */
+  Amount?: number;
+  PromotionRuleDiscountAmount?: number;
+  ExtraInfo?: string | null;
+  ExternalSaleIntegration?: boolean;
+  [extra: string]: unknown;
+}
+
 export interface ExpositionPeriodReservationItem extends BasketItemBase {
   $type: typeof BasketTypeStrings.ExpositionPeriodReservation;
   ExpositionId: string;
   ExpositionPeriodId: string;
   CustomerId?: string | null;
   Comments?: string | null;
+  /** Tickets per PriceGroup — required for OrganisedVisits with priced tiers. */
+  Entries?: ExpositionPeriodReservationEntry[] | null;
+  /** Add-on ArticleSale lines (extras: Cosmoo plush, snacks). */
+  ArticleSales?: Array<Record<string, unknown>> | null;
+  ArticleOptionalSales?: Array<Record<string, unknown>> | null;
+  AutomaticArticleSales?: Array<Record<string, unknown>> | null;
+  /** `true` only for back-office collect-later flows; stays `false` for Webshop. */
+  OrderWithoutPayment?: boolean;
+  PersonalizedMessage?: string | null;
+  LanguageId?: string | null;
+  TargetAudienceId?: string | null;
+  TargetSkillSubCategoryIds?: string[] | null;
+  CombiExpositionExpositionId?: string | null;
+  Donation?: unknown;
+  GiftAid?: unknown;
 }
 
 export interface OrganisedVisitRebookingItem extends BasketItemBase {

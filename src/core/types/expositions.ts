@@ -52,6 +52,36 @@ export interface ExpositionDayOverview {
   [extra: string]: unknown;
 }
 
+/**
+ * A bookable Exposition slot with its addressable `id`. Use
+ * {@link ExpositionsModule.listPeriods} to fetch — `findOverviewByDay`
+ * does NOT expose the id, so it cannot be used as the source for the
+ * `ExpositionPeriodId` required by `ExpositionPeriodReservation`.
+ */
+export interface ExpositionPeriodRef {
+  id: string;
+  expositionId: string;
+  from: RecreatexDateTime;
+  until: RecreatexDateTime;
+  occupancy?: {
+    current?: number;
+    remaining: number;
+    maximum: number;
+    maxVisitorsPerGroup: number;
+    controlType?: number;
+  };
+  /** Last day on which a webshop reservation can be made. */
+  finalSubscriptionDate?: RecreatexDateTime;
+  /** Last day on which a backoffice reservation can be made. */
+  finalSubscriptionDateBo?: RecreatexDateTime;
+  isExcluded?: boolean;
+  blocked?: boolean;
+  comment?: string;
+  resellerCapacity?: number;
+  articles?: unknown[];
+  [extra: string]: unknown;
+}
+
 // ---- OrganisedVisits -----------------------------------------------------
 
 export interface OrganisedVisitPeriodReservation {

@@ -1,5 +1,5 @@
-import { O as OrganisedVisitTicketAdjustment, a as OrganisedVisitSaleAdjustment, E as Exposition, b as ExpositionPeriodDate, Y as Ymd, c as ExpositionDayOverview, F as FindOrganisedVisitsCriteria, d as OrganisedVisit, e as OrganisedVisitPeriodTransfer, R as RecreatexDateTime, f as RecreatexContext, g as RecreatexEnvelope } from './expositions-DoK_BDqH.js';
-export { h as ExpositionPeriod, i as ExpositionPeriodPrice, j as OrganisedVisitArticle, k as OrganisedVisitPeriodReservation, l as OrganisedVisitPerson, m as OrganisedVisitPersonAddress, n as OrganisedVisitSaleGuest, o as OrganisedVisitSaleInfo, P as Paging } from './expositions-DoK_BDqH.js';
+import { O as OrganisedVisitTicketAdjustment, a as OrganisedVisitSaleAdjustment, E as Exposition, b as ExpositionPeriodDate, Y as Ymd, c as ExpositionDayOverview, d as ExpositionPeriodRef, F as FindOrganisedVisitsCriteria, e as OrganisedVisit, f as OrganisedVisitPeriodTransfer, R as RecreatexDateTime, B as Basket, g as BasketItem, C as CheckoutResponse, h as RecreatexContext, i as RecreatexEnvelope } from './basket--qI8o_rw.js';
+export { A as AnonymousPerson, j as ArticleSaleItem, k as BasketPayment, l as BasketTypeString, m as BasketTypeStrings, n as BasketValidationResult, o as CheckoutResult, p as ExpositionPeriod, q as ExpositionPeriodPrice, r as ExpositionPeriodReservationEntry, s as ExpositionPeriodReservationItem, t as OrganisedVisitArticle, u as OrganisedVisitPeriodReservation, v as OrganisedVisitPerson, w as OrganisedVisitPersonAddress, x as OrganisedVisitRebookingItem, y as OrganisedVisitSaleGuest, z as OrganisedVisitSaleInfo, P as Paging } from './basket--qI8o_rw.js';
 
 /**
  * Retry helpers. Only network-level failures and 5xx HTTP errors are
@@ -162,10 +162,16 @@ declare class ArticlesModule {
  *  - `Expositions/FindExpositions`               → room/exposition catalogue
  *  - `Expositions/FindExpositionPeriodDates`     → free days in a window
  *  - `Expositions/FindExpositionOverviewByDay`   → slots + capacity for a day
+ *  - `Expositions/ListExpositionPeriods`         → addressable Period IDs (used to build `ExpositionPeriodReservation` baskets)
  *  - `Expositions/FindOrganisedVisits`           → list bookings (paginated)
  *  - `Expositions/AdjustOrganisedVisit`          → change quantities of an existing visit
  *  - `Expositions/CancelOrganisedVisit`          → cancel + refund prep
  *  - `Expositions/GetOrganisedVisitRebookingCosts` → preview slot-change cost delta
+ *
+ *  ⚠ `findOverviewByDay` does NOT include the period `id` — it only carries
+ *  `from / until / occupancy / prices`. Use {@link ExpositionsModule.listPeriods}
+ *  to obtain the addressable `ExpositionPeriodId` you need for a
+ *  `ExpositionPeriodReservation` basket item.
  *
  *  ⚠ The "apply rebook" endpoint is not exposed as a JSON endpoint at the
  *  time of writing. The CheckoutBasket flow with an OrganisedVisitRebooking
@@ -210,6 +216,27 @@ declare class ExpositionsModule {
     findPeriodDates(expositionId: string, fromIso: string, untilIso: string, callOpts?: CallOptions): Promise<ExpositionPeriodDate[]>;
     /** Slots + capacity for a single day. */
     findOverviewByDay(expositionId: string, date: Ymd, callOpts?: CallOptions): Promise<ExpositionDayOverview[]>;
+    /**
+     * Addressable Period entries (carries the `id` you need for an
+     * `ExpositionPeriodReservation` basket item).
+     *
+     *  ⚠ Use this and NOT {@link findOverviewByDay} when you need to
+     *  build a checkout basket — `findOverviewByDay` does not include
+     *  the period id.
+     *
+     * @param expositionId — the Exposition GUID.
+     * @param fromIso — ISO datetime, e.g. `'2026-05-07T00:00:00'`.
+     * @param untilIso — ISO datetime, e.g. `'2026-05-07T23:59:59'`.
+     *
+     * @example
+     *   const periods = await client.expositions.listPeriods(
+     *     'c9b017fe-fafc-ef11-9596-b28721114d72',
+     *     '2026-05-07T00:00:00', '2026-05-07T23:59:59',
+     *   );
+     *   const slot = periods.find((p) => p.from === '2026-05-07T14:00:00');
+     *   // → slot.id is the ExpositionPeriodId
+     */
+    listPeriods(expositionId: string, fromIso: string, untilIso: string, callOpts?: CallOptions): Promise<ExpositionPeriodRef[]>;
     /**
      * Fetch a single page of OrganisedVisits.
      *
@@ -401,170 +428,6 @@ interface FindGiftCertificatesCriteria {
     number?: string;
     pageIndex?: number;
     pageSize?: number;
-}
-
-/**
- * Basket types — used by `ReCalculateBasket`, `LockBasketItems`,
- * `CheckoutBasket`.
- *
- * All basket items are a discriminated union over the `$type` field. The
- * SDK exports {@link BasketTypeStrings} as a const map of every known
- * subtype string so you don't have to hand-type the
- * `ReCreateX.WebShop.WebServices.Contracts.…, ReCreateX.WebShop.WebServices.Contracts`
- * incantation.
- *
- * Pitfalls verified against the live API:
- *  - `Article: null` on an `ArticleSale` item → API throws
- *    "Object reference not set to an instance of an object".
- *    Always pass `Article: { Id: "<guid>" }`.
- *  - `PayLater: true` on a Gift Certificate basket → `InvalidPayLaterPayment`.
- *    Provide a `Payments[]` array with a real `BasketPayment`.
- *  - `CustomerId: "00000000-..."` → `MissingCustomer`. Use the
- *    Webshop-Guest-Person GUID
- *    (Space Magic: `119d9f06-66ad-ef11-9595-9a21964517de`) instead.
- *  - `BasketPayment.PaymentMethod: { ... }` (nested) → type-not-found error.
- *    The structure is FLAT: `PaymentMethodId: "<guid>"` directly on the
- *    `BasketPayment`.
- */
-/** Discriminator strings for `$type` on basket items / payments / costs. */
-declare const BasketTypeStrings: {
-    readonly ArticleSale: "ReCreateX.WebShop.WebServices.Contracts.ArticleSale, ReCreateX.WebShop.WebServices.Contracts";
-    /** Webshop-flavoured ArticleSale used by the OMG voucher shop. */
-    readonly SalesArticleSale: "ReCreateX.WebShop.WebServices.Contracts.SalesArticleSale, ReCreateX.WebShop.WebServices.Contracts";
-    readonly ExpositionPeriodReservation: "ReCreateX.WebShop.WebServices.Contracts.ExpositionPeriodReservation, ReCreateX.WebShop.WebServices.Contracts";
-    readonly CombiExpositionReservation: "ReCreateX.WebShop.WebServices.Contracts.CombiExpositionReservation, ReCreateX.WebShop.WebServices.Contracts";
-    readonly OrganisedVisitRebooking: "ReCreateX.WebShop.WebServices.Contracts.OrganisedVisitRebooking, ReCreateX.WebShop.WebServices.Contracts";
-    readonly CombiOrganisedVisitRebooking: "ReCreateX.WebShop.WebServices.Contracts.CombiOrganisedVisitRebooking, ReCreateX.WebShop.WebServices.Contracts";
-    readonly CultureEventReservation: "ReCreateX.WebShop.WebServices.Contracts.CultureEventReservation, ReCreateX.WebShop.WebServices.Contracts";
-    readonly RentalReservation: "ReCreateX.WebShop.WebServices.Contracts.RentalReservation, ReCreateX.WebShop.WebServices.Contracts";
-    readonly ActivityReservation: "ReCreateX.WebShop.WebServices.Contracts.ActivityReservation, ReCreateX.WebShop.WebServices.Contracts";
-    readonly TableSale: "ReCreateX.WebShop.WebServices.Contracts.TableSale, ReCreateX.WebShop.WebServices.Contracts";
-    readonly BasketPayment: "ReCreateX.WebShop.WebServices.Contracts.BasketPayment, ReCreateX.WebShop.WebServices.Contracts";
-    readonly GiftCertificateDiscount: "ReCreateX.WebShop.WebServices.Contracts.GiftCertificateDiscount, ReCreateX.WebShop.WebServices.Contracts";
-    readonly CouponCodeDiscount: "ReCreateX.WebShop.WebServices.Contracts.CouponCodeDiscount, ReCreateX.WebShop.WebServices.Contracts";
-};
-type BasketTypeString = (typeof BasketTypeStrings)[keyof typeof BasketTypeStrings];
-interface BasketItemBase {
-    $type: BasketTypeString;
-    Id: string;
-    DivisionId: string;
-    Quantity: number;
-    UnitPrice: number;
-    CustomerContactId?: string;
-    RuleNamesToIgnore?: string[] | null;
-    AdvancementPrice?: number | null;
-    AsReseller?: boolean;
-    PromotionRuleDiscountAmount?: number;
-    LockTicket?: unknown;
-}
-/** Article line — F&B, voucher, ticket. `Article` MUST be `{ Id }`, never null. */
-interface ArticleSaleItem extends BasketItemBase {
-    $type: typeof BasketTypeStrings.ArticleSale | typeof BasketTypeStrings.SalesArticleSale;
-    Article: {
-        Id: string;
-    };
-    CustomPrice?: number;
-    ExtraDescription?: string | null;
-}
-interface ExpositionPeriodReservationItem extends BasketItemBase {
-    $type: typeof BasketTypeStrings.ExpositionPeriodReservation;
-    ExpositionId: string;
-    ExpositionPeriodId: string;
-    CustomerId?: string | null;
-    Comments?: string | null;
-}
-interface OrganisedVisitRebookingItem extends BasketItemBase {
-    $type: typeof BasketTypeStrings.OrganisedVisitRebooking;
-    OrganisedVisitId: string;
-    OrganisedVisitPeriodTransfers?: Array<{
-        OldPeriodId: string;
-        NewPeriodId: string;
-        Quantity: number;
-    }> | null;
-}
-type BasketItem = ArticleSaleItem | ExpositionPeriodReservationItem | OrganisedVisitRebookingItem | (BasketItemBase & {
-    [extra: string]: unknown;
-});
-/**
- * Payment block. Note the FLAT structure — `PaymentMethodId` is a sibling,
- * not nested inside a `PaymentMethod` object.
- *
- * `TrxId` / `OrderId` / `PayId` are v8.3.0+ fields meant for Enviso-Split
- * payments; we re-use them for Mollie reference data.
- */
-interface BasketPayment {
-    $type: typeof BasketTypeStrings.BasketPayment;
-    Amount: number;
-    Currency: string;
-    PaymentMethodId: string;
-    ExtraInfo1?: string;
-    ExtraInfo2?: string;
-    OrderId?: string;
-    TrxId?: string;
-    PayId?: string;
-}
-/** Anonymous-buyer block used when no person record exists yet. */
-interface AnonymousPerson {
-    Name?: string | null;
-    FirstName?: string | null;
-    Street1?: string | null;
-    Street2?: string | null;
-    Number?: string | null;
-    Box?: string | null;
-    Home?: string | null;
-    Country?: string | null;
-    Email?: string | null;
-    Newsletter?: boolean;
-    ZipCode?: string | null;
-    Telephone?: string | null;
-}
-interface Basket {
-    /** ALWAYS the Webshop-Guest-Person GUID for anonymous orders, never zero. */
-    CustomerId: string;
-    Items: BasketItem[];
-    Payments?: BasketPayment[] | null;
-    CouponCodes?: string[] | null;
-    Info1?: string;
-    Info2?: string;
-    Info3?: string;
-    AnonymousPerson?: AnonymousPerson;
-    Comment?: string;
-    OrderId?: string;
-    PayLater?: boolean;
-    TrxId?: string;
-    PayId?: string;
-    /** Catch-all for less-common fields. */
-    [extra: string]: unknown;
-}
-/**
- * Basket validation result.
- *
- * The wire payload is camelCase on the way back from Recreatex
- * (`isValid`, `message`, `brokenRuleName`) — the request side is
- * PascalCase, but the response is serialised lower-first.
- */
-interface BasketValidationResult {
-    isValid: boolean;
-    message?: string | null;
-    brokenRuleName?: string | null;
-    basketItemValidationResults?: unknown;
-}
-interface CheckoutResult {
-    resultState: number;
-    salesOrderNumber: string;
-    salesSeriesId?: string | null;
-    invoiceId?: string | null;
-    hasCollectLaterLines?: boolean;
-    tokenNumber?: string | null;
-    basketValidationResult: BasketValidationResult;
-    salesItems?: Array<{
-        id: string;
-        salesNumber?: number | null;
-        [extra: string]: unknown;
-    }> | null;
-}
-interface CheckoutResponse {
-    result: CheckoutResult;
 }
 
 /**
@@ -960,4 +823,4 @@ declare function ymdWindow(before: number, after: number, today?: Date, tz?: str
     untilYmd: Ymd;
 };
 
-export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type AnonymousPerson, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleSaleItem, type ArticleVat, ArticlesModule, type Basket, type BasketItem, type BasketPayment, type BasketTypeString, BasketTypeStrings, type BasketValidationResult, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, type CheckoutResponse, type CheckoutResult, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, type ExpositionPeriodReservationItem, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, type OrganisedVisitRebookingItem, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };

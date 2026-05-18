@@ -4,6 +4,9 @@ If you are an AI agent reading this for the first time, internalise this
 file before writing code against `recreatex-sdk`. Most "Recreatex
 returned a weird error" sessions end on one of the items below.
 
+For business workflows, read [`WORKFLOWS.md`](WORKFLOWS.md) after this
+pitfall list. For raw endpoint coverage, read [`ENDPOINTS.md`](ENDPOINTS.md).
+
 ## Auth
 
 Every JSON request body is `{ Context, ...payload }`. Context fields:
@@ -20,6 +23,10 @@ Every JSON request body is `{ Context, ...payload }`. Context fields:
 The `ReCreateXClient` builds this for you. **Never hand-craft Context** —
 you'll forget a field. Use `client.post()` if you must reach a custom
 endpoint.
+
+Never commit live credentials, customer exports, voucher codes from real
+customers, booking PDFs, or raw booking data. Use environment variables or a
+gitignored local env file for live checks.
 
 For Space Magic the canonical IDs are exported as
 `recreatex-sdk/spacemagic` constants:

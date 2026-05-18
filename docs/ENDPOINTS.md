@@ -6,6 +6,8 @@ this for you).
 
 Base URL: `https://wsdlspacemagic.recreatex.be`. The document service
 sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
+For business-level recipes that compose these endpoints, see
+[`WORKFLOWS.md`](WORKFLOWS.md).
 
 | Module | Method on `client.*` | Wire path | Use case |
 |---|---|---|---|
@@ -116,6 +118,33 @@ SDK matches on those, otherwise it falls back to the sales-line description.
 The live endpoint expects numeric `Type` enum values; the SDK accepts friendly
 strings like `'Sales'` and translates them before sending.
 
+## Revenue and visitors
+
+Use `manager.listSalesInformation()` for revenue dashboard aggregates:
+
+```ts
+const sales = await rx.manager.listSalesInformation({
+  from: '2026-05-18 00:00:00.000',
+  until: '2026-05-18 23:59:59.000',
+  groupByDate: true,
+  groupByDivision: true,
+  groupByArticleGroup: true,
+});
+```
+
+Use `general.findAccessZones({ today: true })` for live visitor counts:
+
+```ts
+const zones = await rx.general.findAccessZones({
+  today: true,
+  includes: { occupancy: true },
+});
+```
+
+`FindAccessZones` is live-only for occupancy. For historical visitor charts,
+persist snapshots or use `ListVisitingCustomersInformation` as a scan-based
+metric with a clear label.
+
 ## Discounts
 
 Coupon/voucher endpoints support validation and checkout reservation, not a
@@ -137,6 +166,20 @@ Historical OrganisedVisits can be retrieved by id/order number and converted
 to invoice-ready data via `getBookingInvoiceDraft()` from
 `recreatex-sdk/spacemagic`. If an OrganisedVisit PDF template is configured in
 Recreatex, download it with `rx.documents.organisedVisitPdf({ organisedVisitId })`.
+
+```ts
+const draft = await getBookingInvoiceDraft(rx, {
+  orderNumber: '...',
+});
+
+const pdf = await rx.documents.organisedVisitPdf({
+  organisedVisitId: draft.bookingId,
+});
+```
+
+The public JSON API exposes retrieval, not an official "create a new
+back-office invoice" mutation. Render your own invoice/pro-forma document from
+the draft when Recreatex does not already have the needed PDF.
 
 ## Response shape conventions
 

@@ -10,6 +10,8 @@
  * in the Recreatex backoffice.
  */
 
+import type { Article, CallOptions, ReCreateXClient } from '../core/index.js';
+
 export const GASTRO_GROUP_MAP: ReadonlyMap<string, string> = new Map([
   ['d33c73eb-22ab-ef11-9595-9a21964517de', 'Alkohol'],
   ['cc3c73eb-22ab-ef11-9595-9a21964517de', 'Burger'],
@@ -39,4 +41,104 @@ export function gastroGroupName(articleGroupId: string | null | undefined): stri
 /** True if the given articleGroupID is mapped as a gastro category. */
 export function isGastroGroup(articleGroupId: string | null | undefined): boolean {
   return !!articleGroupId && GASTRO_GROUP_MAP.has(articleGroupId);
+}
+
+export interface ListGastroArticlesOptions {
+  /** Optional division filter, e.g. `DIVISION_IDS.spaceMagic`. */
+  divisionId?: string;
+  /** Fetch options/barcodes/stock detail too. Defaults to false. */
+  includeDetail?: boolean;
+  /** Include groups even when Recreatex returns no articles for them. */
+  includeEmptyGroups?: boolean;
+  /** Forwarded to `FindArticles.IgnoreActivePeriodsFilter`. */
+  ignoreActivePeriodsFilter?: boolean;
+  /** Page size for each `FindArticles` group query. Defaults to 200. */
+  pageSize?: number;
+}
+
+export interface GastroArticleCatalogItem {
+  groupId: string;
+  groupName: string;
+  id: string;
+  code: string;
+  name: string;
+  price: number;
+  vatPercentage?: number;
+  imageUrl?: string | null;
+  article: Article;
+}
+
+export interface GastroArticleCatalogGroup {
+  groupId: string;
+  groupName: string;
+  articles: GastroArticleCatalogItem[];
+}
+
+/**
+ * Fetch all known Space Magic gastro articles from Recreatex, grouped by the
+ * article groups used in the KPI dashboard.
+ */
+export async function listGastroArticles(
+  client: Pick<ReCreateXClient, 'articles'>,
+  options: ListGastroArticlesOptions = {},
+  callOpts?: CallOptions,
+): Promise<GastroArticleCatalogGroup[]> {
+  const groups = await Promise.all(
+    [...GASTRO_GROUP_MAP.entries()].map(async ([groupId, groupName]) => {
+      const articles = await client.articles.findArticles(
+        {
+          articleGroupId: groupId,
+          ...(options.divisionId && { divisionId: options.divisionId }),
+          ...(options.includeDetail !== undefined && { includeDetail: options.includeDetail }),
+          ...(options.ignoreActivePeriodsFilter !== undefined && {
+            ignoreActivePeriodsFilter: options.ignoreActivePeriodsFilter,
+          }),
+          pageSize: options.pageSize ?? 200,
+          includes: {
+            price: true,
+            imageUrl: true,
+            group: true,
+            vat: true,
+            ...(options.includeDetail && { barcodes: true, stock: true }),
+          },
+        },
+        { pageSize: options.pageSize ?? 200 },
+        callOpts,
+      );
+      return {
+        groupId,
+        groupName,
+        articles: articles.map((article) => toGastroCatalogItem(article, groupId, groupName)),
+      };
+    }),
+  );
+
+  return groups
+    .map((group) => ({
+      ...group,
+      articles: group.articles.sort(compareGastroArticles),
+    }))
+    .filter((group) => options.includeEmptyGroups || group.articles.length > 0);
+}
+
+function toGastroCatalogItem(
+  article: Article,
+  groupId: string,
+  groupName: string,
+): GastroArticleCatalogItem {
+  return {
+    groupId,
+    groupName,
+    id: article.id,
+    code: article.code,
+    name: article.name,
+    price: article.price,
+    ...(article.vat?.percentage !== undefined && { vatPercentage: article.vat.percentage }),
+    ...(article.imageUrl !== undefined && { imageUrl: article.imageUrl }),
+    article,
+  };
+}
+
+function compareGastroArticles(a: GastroArticleCatalogItem, b: GastroArticleCatalogItem): number {
+  return a.name.localeCompare(b.name, 'de-DE') || a.code.localeCompare(b.code, 'de-DE');
 }

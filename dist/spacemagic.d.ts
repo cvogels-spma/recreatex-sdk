@@ -1,4 +1,4 @@
-import { e as OrganisedVisit, t as OrganisedVisitArticle, u as OrganisedVisitPeriodReservation, B as Basket } from './basket--qI8o_rw.js';
+import { f as Article, ao as ReCreateXClient, C as CallOptions, a6 as OrganisedVisit, a7 as OrganisedVisitArticle, a8 as OrganisedVisitPeriodReservation, B as Basket } from './client-BkF_SWKx.js';
 
 /**
  * Space Magic-specific GUIDs and constants.
@@ -68,11 +68,45 @@ declare function classifyVoucher(code: string): VoucherDeliveryType | 'unknown';
  * 2026-04-28. Add new entries whenever a fresh article group is created
  * in the Recreatex backoffice.
  */
+
 declare const GASTRO_GROUP_MAP: ReadonlyMap<string, string>;
 /** Look up the human label for an articleGroupID; returns the UUID itself if unknown. */
 declare function gastroGroupName(articleGroupId: string | null | undefined): string;
 /** True if the given articleGroupID is mapped as a gastro category. */
 declare function isGastroGroup(articleGroupId: string | null | undefined): boolean;
+interface ListGastroArticlesOptions {
+    /** Optional division filter, e.g. `DIVISION_IDS.spaceMagic`. */
+    divisionId?: string;
+    /** Fetch options/barcodes/stock detail too. Defaults to false. */
+    includeDetail?: boolean;
+    /** Include groups even when Recreatex returns no articles for them. */
+    includeEmptyGroups?: boolean;
+    /** Forwarded to `FindArticles.IgnoreActivePeriodsFilter`. */
+    ignoreActivePeriodsFilter?: boolean;
+    /** Page size for each `FindArticles` group query. Defaults to 200. */
+    pageSize?: number;
+}
+interface GastroArticleCatalogItem {
+    groupId: string;
+    groupName: string;
+    id: string;
+    code: string;
+    name: string;
+    price: number;
+    vatPercentage?: number;
+    imageUrl?: string | null;
+    article: Article;
+}
+interface GastroArticleCatalogGroup {
+    groupId: string;
+    groupName: string;
+    articles: GastroArticleCatalogItem[];
+}
+/**
+ * Fetch all known Space Magic gastro articles from Recreatex, grouped by the
+ * article groups used in the KPI dashboard.
+ */
+declare function listGastroArticles(client: Pick<ReCreateXClient, 'articles'>, options?: ListGastroArticlesOptions, callOpts?: CallOptions): Promise<GastroArticleCatalogGroup[]>;
 
 /**
  * Categorise an OrganisedVisit into a Space-Magic-specific bucket.
@@ -291,4 +325,4 @@ interface BirthdayCheckoutResult {
     balanceRemaining: number;
 }
 
-export { type BirthdayBookingInput, type BirthdayCheckoutResult, type BirthdayExtraArticle, type BirthdayPriceTier, type BookingRow, DIVISION_IDS, type EscapeRow, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, type VisitCategory, type VoucherDeliveryType, type VoucherSku, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, mapBirthdayBooking, mapEscapeBooking };
+export { type BirthdayBookingInput, type BirthdayCheckoutResult, type BirthdayExtraArticle, type BirthdayPriceTier, type BookingRow, DIVISION_IDS, type EscapeRow, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, type GastroArticleCatalogGroup, type GastroArticleCatalogItem, type ListGastroArticlesOptions, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, type VisitCategory, type VoucherDeliveryType, type VoucherSku, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, listGastroArticles, mapBirthdayBooking, mapEscapeBooking };

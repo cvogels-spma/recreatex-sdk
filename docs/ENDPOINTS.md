@@ -62,6 +62,24 @@ articles/expositions.
 
 ## Article-level sales
 
+Use `listGastroArticles(rx)` from `recreatex-sdk/spacemagic` to map the
+known Space Magic gastro article groups to their concrete Recreatex articles
+before building item-level reports:
+
+```ts
+const catalog = await listGastroArticles(rx);
+const rows = catalog.flatMap((group) =>
+  group.articles.map((article) => ({
+    group: group.groupName,
+    code: article.code,
+    name: article.name,
+    price: article.price,
+    articleId: article.id,
+  })),
+);
+console.table(rows);
+```
+
 Use `articles.getArticleSalesReport()` for the common “Hamburger dossier”
 case:
 

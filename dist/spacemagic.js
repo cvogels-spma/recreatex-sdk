@@ -65,6 +65,57 @@ function gastroGroupName(articleGroupId) {
 function isGastroGroup(articleGroupId) {
   return !!articleGroupId && GASTRO_GROUP_MAP.has(articleGroupId);
 }
+async function listGastroArticles(client, options = {}, callOpts) {
+  const groups = await Promise.all(
+    [...GASTRO_GROUP_MAP.entries()].map(async ([groupId, groupName]) => {
+      const articles = await client.articles.findArticles(
+        {
+          articleGroupId: groupId,
+          ...options.divisionId && { divisionId: options.divisionId },
+          ...options.includeDetail !== void 0 && { includeDetail: options.includeDetail },
+          ...options.ignoreActivePeriodsFilter !== void 0 && {
+            ignoreActivePeriodsFilter: options.ignoreActivePeriodsFilter
+          },
+          pageSize: options.pageSize ?? 200,
+          includes: {
+            price: true,
+            imageUrl: true,
+            group: true,
+            vat: true,
+            ...options.includeDetail && { barcodes: true, stock: true }
+          }
+        },
+        { pageSize: options.pageSize ?? 200 },
+        callOpts
+      );
+      return {
+        groupId,
+        groupName,
+        articles: articles.map((article) => toGastroCatalogItem(article, groupId, groupName))
+      };
+    })
+  );
+  return groups.map((group) => ({
+    ...group,
+    articles: group.articles.sort(compareGastroArticles)
+  })).filter((group) => options.includeEmptyGroups || group.articles.length > 0);
+}
+function toGastroCatalogItem(article, groupId, groupName) {
+  return {
+    groupId,
+    groupName,
+    id: article.id,
+    code: article.code,
+    name: article.name,
+    price: article.price,
+    ...article.vat?.percentage !== void 0 && { vatPercentage: article.vat.percentage },
+    ...article.imageUrl !== void 0 && { imageUrl: article.imageUrl },
+    article
+  };
+}
+function compareGastroArticles(a, b) {
+  return a.name.localeCompare(b.name, "de-DE") || a.code.localeCompare(b.code, "de-DE");
+}
 
 // src/spacemagic/visits/categorize.ts
 var ESCAPE_KEYWORDS = ["hexenmeister", "landekapsel", "escape"];
@@ -309,6 +360,6 @@ function buildBirthdayBasket(input) {
   };
 }
 
-export { DIVISION_IDS, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, mapBirthdayBooking, mapEscapeBooking };
+export { DIVISION_IDS, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, listGastroArticles, mapBirthdayBooking, mapEscapeBooking };
 //# sourceMappingURL=spacemagic.js.map
 //# sourceMappingURL=spacemagic.js.map

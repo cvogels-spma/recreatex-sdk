@@ -14,7 +14,7 @@ One package, two subpath exports:
 
 ```ts
 import { ReCreateXClient } from 'recreatex-sdk/core';
-import { SHOP_ID, GUEST_CUSTOMER_ID, VOUCHER_SKUS } from 'recreatex-sdk/spacemagic';
+import { SHOP_ID, GUEST_CUSTOMER_ID, VOUCHER_SKUS, listGastroArticles } from 'recreatex-sdk/spacemagic';
 
 const rx = new ReCreateXClient({
   baseUrl:  'https://wsdlspacemagic.recreatex.be',
@@ -30,6 +30,15 @@ console.log(`In park right now: ${zones[0]?.occupancy?.visitorsCurrent ?? 0}`);
 const visits = await rx.expositions.findOrganisedVisits({
   fromYmd: '2026-04-01', untilYmd: '2026-04-30',
 });
+
+// Gastro article catalogue
+const gastro = await listGastroArticles(rx);
+console.table(gastro.flatMap((g) => g.articles.map((a) => ({
+  group: g.groupName,
+  code: a.code,
+  article: a.name,
+  price: a.price,
+}))));
 
 // Article-level sales dossier
 const hamburger = await rx.articles.getArticleSalesReport({

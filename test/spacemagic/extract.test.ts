@@ -11,6 +11,7 @@ import {
   findVoucher,
   gastroGroupName,
   isGastroGroup,
+  listGastroArticles,
 } from '../../src/spacemagic/index.js';
 
 describe('extractKind', () => {
@@ -192,5 +193,54 @@ describe('isGastroGroup', () => {
     expect(isGastroGroup('not-a-real-uuid')).toBe(false);
     expect(isGastroGroup(null)).toBe(false);
     expect(isGastroGroup(undefined)).toBe(false);
+  });
+});
+
+describe('listGastroArticles', () => {
+  it('fetches and groups known gastro article groups', async () => {
+    const calls: unknown[] = [];
+    const client = {
+      articles: {
+        findArticles: async (criteria: { articleGroupId?: string }) => {
+          calls.push(criteria);
+          if (criteria.articleGroupId !== 'cc3c73eb-22ab-ef11-9595-9a21964517de') return [];
+          return [
+            {
+              id: 'burger-2',
+              code: 'B02',
+              name: 'Hamburger',
+              price: 6,
+              divisionId: '',
+              allowPriceChangeWebshop: false,
+              vat: { percentage: 19 },
+            },
+            {
+              id: 'burger-1',
+              code: 'B01',
+              name: 'Cheeseburger',
+              price: 6.5,
+              divisionId: '',
+              allowPriceChangeWebshop: false,
+            },
+          ];
+        },
+      },
+    };
+
+    const catalog = await listGastroArticles(client, { divisionId: 'space-magic' });
+
+    expect(calls).toHaveLength(17);
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]?.groupName).toBe('Burger');
+    expect(catalog[0]?.articles.map((article) => article.name)).toEqual([
+      'Cheeseburger',
+      'Hamburger',
+    ]);
+    expect(catalog[0]?.articles[1]).toMatchObject({
+      groupName: 'Burger',
+      code: 'B02',
+      price: 6,
+      vatPercentage: 19,
+    });
   });
 });

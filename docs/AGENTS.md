@@ -58,7 +58,7 @@ For Space Magic the canonical IDs are exported as
 | "What money is on a wristband / left unpaid?" | `general.getDigitalWallets({ includes: { transactions: true } })`, WITHOUT `personId` (all bands; `PersonId: null` → HTTP 500). `balance < 0` = owed; open postings have `salesNo: 0`. Use `balance`, never a sum of transaction `amount`s. Until 2026-10-24 this file said it was unreachable, which was wrong. |
 | Concluding "the endpoint does not exist" | Check `GET /json/documentation` (562 endpoints) first. The 404 list in `ENDPOINTS.md` was built from guessed names and missed the wallets. |
 | 50 % deposit not visible as "open balance" | Set `Basket.Payments[0].Amount = depositAmount`, `Basket.Balance = grossTotal - depositAmount`, leave `Basket.PayLater = false`. Recreatex echoes the deposit back as `advancementPrice` on the locked item and shows the rest as a remaining balance on the OrganisedVisit. |
-| Article-level sales history | Use `articles.getArticleSalesReport()` / `FindArticleSalesOrders`. The public docs expose date/person/type filters, not a reliable ArticleId filter, so the SDK matches returned sales lines by article id/code when present and falls back to the line description. Prefer exact `code` or `articleId` when you have it. |
+| Article-level sales history | Use `articles.getArticleSalesReport()` / `FindArticleSalesOrders`. The public docs expose date/person/type filters, not a reliable ArticleId filter, so the SDK matches returned sales lines by article id/code when present and falls back to the line description. Prefer exact `code` or `articleId` when you have it. The live API rejects string enum values like `"Sales"` here; the SDK maps them to numeric enum values before sending. |
 
 ## Two date formats
 

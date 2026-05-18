@@ -252,7 +252,7 @@ var ArticlesModule = class {
     if (criteria.personId) SearchCriteria.PersonId = criteria.personId;
     if (criteria.from) SearchCriteria.From = criteria.from;
     if (criteria.until) SearchCriteria.Until = criteria.until;
-    if (criteria.type !== void 0) SearchCriteria.Type = criteria.type;
+    if (criteria.type !== void 0) SearchCriteria.Type = encodeArticleSalesOrderType(criteria.type);
     const data = await this.client.post(
       "Json/Articles/FindArticleSalesOrders",
       { SearchCriteria },
@@ -346,6 +346,30 @@ function same(a, b) {
 }
 function normalize(v) {
   return (v ?? "").trim().toLocaleLowerCase("de-DE");
+}
+var ARTICLE_SALES_ORDER_TYPE_VALUES = {
+  All: 0,
+  Sales: 1,
+  Warranty: 2,
+  WaitingList: 3,
+  Service: 4,
+  ChipKnip: 5,
+  LessonGroup: 6,
+  Purchase: 7,
+  PriceGroup: 8,
+  Credit: 9,
+  Rental: 10,
+  Subscription: 11,
+  PurchaseCredit: 12,
+  Family: 13,
+  GiftCertificate: 14,
+  ConsumptionCoupon: 15,
+  FollowUp: 16,
+  SpendingCredit: 17,
+  ETicket: 18
+};
+function encodeArticleSalesOrderType(type) {
+  return typeof type === "string" ? ARTICLE_SALES_ORDER_TYPE_VALUES[type] ?? type : type;
 }
 function matchesArticleSalesOrder(line, opts) {
   const lineArticleId = readString(line, "articleId", "ArticleId", "ArticleID") ?? readNestedId(line, "article", "Article");

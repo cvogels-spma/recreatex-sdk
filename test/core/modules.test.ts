@@ -204,7 +204,7 @@ describe('ArticlesModule', () => {
     expect(report.lines?.map((line) => line.saleLineId)).toEqual(['line-1', 'line-3', 'line-4']);
     const salesCall = calls.find((call) => call.url.endsWith('/Json/Articles/FindArticleSalesOrders/'));
     expect((salesCall?.body as { SearchCriteria?: Record<string, unknown> })?.SearchCriteria).toMatchObject({
-      Type: 'Sales',
+      Type: 1,
       From: '2026-05-01 00:00:00.000',
       Until: '2026-05-31 23:59:59.000',
     });

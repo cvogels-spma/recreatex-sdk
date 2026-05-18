@@ -1,4 +1,4 @@
-import { e as OrganisedVisit, t as OrganisedVisitArticle, u as OrganisedVisitPeriodReservation, B as Basket } from './basket--qI8o_rw.js';
+import { f as Article, Y as Ymd, ay as ReCreateXClient, C as CallOptions, af as OrganisedVisit, ag as OrganisedVisitArticle, ai as OrganisedVisitPeriodReservation, B as Basket } from './client-Df-HhiRI.js';
 
 /**
  * Space Magic-specific GUIDs and constants.
@@ -68,11 +68,101 @@ declare function classifyVoucher(code: string): VoucherDeliveryType | 'unknown';
  * 2026-04-28. Add new entries whenever a fresh article group is created
  * in the Recreatex backoffice.
  */
+
 declare const GASTRO_GROUP_MAP: ReadonlyMap<string, string>;
 /** Look up the human label for an articleGroupID; returns the UUID itself if unknown. */
 declare function gastroGroupName(articleGroupId: string | null | undefined): string;
 /** True if the given articleGroupID is mapped as a gastro category. */
 declare function isGastroGroup(articleGroupId: string | null | undefined): boolean;
+interface ListGastroArticlesOptions {
+    /** Optional division filter, e.g. `DIVISION_IDS.spaceMagic`. */
+    divisionId?: string;
+    /** Fetch options/barcodes/stock detail too. Defaults to false. */
+    includeDetail?: boolean;
+    /** Include groups even when Recreatex returns no articles for them. */
+    includeEmptyGroups?: boolean;
+    /** Forwarded to `FindArticles.IgnoreActivePeriodsFilter`. */
+    ignoreActivePeriodsFilter?: boolean;
+    /** Page size for each `FindArticles` group query. Defaults to 200. */
+    pageSize?: number;
+}
+interface GastroArticleCatalogItem {
+    groupId: string;
+    groupName: string;
+    id: string;
+    code: string;
+    name: string;
+    price: number;
+    vatPercentage?: number;
+    imageUrl?: string | null;
+    article: Article;
+}
+interface GastroArticleCatalogGroup {
+    groupId: string;
+    groupName: string;
+    articles: GastroArticleCatalogItem[];
+}
+interface SyncGastroSalesOptions extends ListGastroArticlesOptions {
+    fromYmd: Ymd;
+    untilYmd: Ymd;
+    articleIds?: string[];
+    articleCodes?: string[];
+    /** Defaults to false to avoid double-counting duplicated names like Coca Cola. */
+    includeAmbiguousDescriptionMatches?: boolean;
+    /** Include all non-gastro / unmatched sales lines in `issues`. Defaults to false. */
+    includeUnmatchedIssues?: boolean;
+    /** Max Recreatex pages per day for `FindArticleSalesOrders`. Defaults to 100. */
+    maxPagesPerDay?: number;
+}
+interface GastroSalesSyncRow {
+    date: Ymd;
+    groupId: string;
+    groupName: string;
+    articleId: string;
+    code: string;
+    name: string;
+    cataloguePrice: number;
+    quantity: number;
+    totalPrice: number;
+    lineCount: number;
+    averageUnitPrice: number | null;
+}
+interface GastroSalesSyncIssue {
+    date: Ymd;
+    description: string;
+    quantity: number;
+    totalPrice: number;
+    reason: 'unmatched' | 'ambiguous-description';
+    candidateArticleIds?: string[];
+}
+interface GastroSalesSyncResult {
+    fromYmd: Ymd;
+    untilYmd: Ymd;
+    articleCount: number;
+    rows: GastroSalesSyncRow[];
+    totals: {
+        quantity: number;
+        totalPrice: number;
+        lineCount: number;
+        averageUnitPrice: number | null;
+    };
+    issues: GastroSalesSyncIssue[];
+}
+/**
+ * Fetch all known Space Magic gastro articles from Recreatex, grouped by the
+ * article groups used in the KPI dashboard.
+ */
+declare function listGastroArticles(client: Pick<ReCreateXClient, 'articles'>, options?: ListGastroArticlesOptions, callOpts?: CallOptions): Promise<GastroArticleCatalogGroup[]>;
+/**
+ * Robust article-level gastro sales sync.
+ *
+ * Recreatex cannot reliably filter `FindArticleSalesOrders` by article id, so
+ * this pulls sales lines day-by-day, then maps them to the known gastro
+ * catalogue by article id/code when present and by exact description when it is
+ * unique. Ambiguous description-only matches are reported in `issues` by
+ * default instead of being double-counted.
+ */
+declare function syncGastroSales(client: Pick<ReCreateXClient, 'articles'>, options: SyncGastroSalesOptions, callOpts?: CallOptions): Promise<GastroSalesSyncResult>;
 
 /**
  * Categorise an OrganisedVisit into a Space-Magic-specific bucket.
@@ -291,4 +381,86 @@ interface BirthdayCheckoutResult {
     balanceRemaining: number;
 }
 
-export { type BirthdayBookingInput, type BirthdayCheckoutResult, type BirthdayExtraArticle, type BirthdayPriceTier, type BookingRow, DIVISION_IDS, type EscapeRow, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, type VisitCategory, type VoucherDeliveryType, type VoucherSku, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, mapBirthdayBooking, mapEscapeBooking };
+/**
+ * Build invoice-ready data from historical OrganisedVisit bookings.
+ *
+ * Recreatex exposes the booking, sales lines and customer-ish guest data, but
+ * not a public "create a back-office invoice after the fact" endpoint. These
+ * helpers produce a stable draft that an app can render to HTML/PDF or hand to
+ * accounting.
+ */
+
+interface BookingInvoiceLookupCriteria {
+    organisedVisitId?: string;
+    orderNumber?: string;
+    /** OrganisedVisit `no` / booking number. Requires a date window. */
+    bookingNo?: number | string;
+    fromYmd?: Ymd;
+    untilYmd?: Ymd;
+}
+interface BookingInvoiceDraftOptions {
+    /** Keep free/zero-value linked articles on the invoice draft. Defaults to false. */
+    includeZeroAmountLines?: boolean;
+}
+interface BookingInvoiceCustomer {
+    name: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    telephone?: string | null;
+    street?: string;
+    number?: string;
+    zipCode?: string;
+    town?: string;
+    country?: string | null;
+}
+interface BookingInvoiceLine {
+    source: 'periodReservation' | 'article';
+    id?: string;
+    articleId?: string;
+    articleCode?: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    amount: number;
+    lineAmount: number;
+    vatAmount: number;
+    vatPercentage?: number;
+    expositionName?: string;
+    periodFrom?: string;
+    periodUntil?: string;
+}
+interface BookingInvoiceSalesInfo {
+    salesSeriesId: string;
+    salesNo: number;
+    salesDate: string;
+    invoiceNumber?: number;
+    invoiceDate?: string;
+}
+interface BookingInvoiceDraft {
+    bookingId: string;
+    bookingNo: number;
+    orderNumber?: string;
+    startDate: string;
+    endDate: string;
+    purchaseDate?: string;
+    comment?: string;
+    customer: BookingInvoiceCustomer;
+    lines: BookingInvoiceLine[];
+    totals: {
+        amount: number;
+        lineAmount: number;
+        vatAmount: number;
+        paidAmount: number;
+        balance: number;
+        couponDiscount: number;
+    };
+    salesInfos: BookingInvoiceSalesInfo[];
+    raw: OrganisedVisit;
+}
+declare function getBookingInvoiceDraft(client: Pick<ReCreateXClient, 'expositions'>, criteria: BookingInvoiceLookupCriteria, options?: BookingInvoiceDraftOptions, callOpts?: CallOptions): Promise<BookingInvoiceDraft>;
+declare function findBookingForInvoice(client: Pick<ReCreateXClient, 'expositions'>, criteria: BookingInvoiceLookupCriteria, callOpts?: CallOptions): Promise<OrganisedVisit>;
+declare function buildBookingInvoiceDraft(visit: OrganisedVisit, options?: BookingInvoiceDraftOptions): BookingInvoiceDraft;
+declare function renderBookingInvoiceHtml(draft: BookingInvoiceDraft): string;
+
+export { type BirthdayBookingInput, type BirthdayCheckoutResult, type BirthdayExtraArticle, type BirthdayPriceTier, type BookingInvoiceCustomer, type BookingInvoiceDraft, type BookingInvoiceDraftOptions, type BookingInvoiceLine, type BookingInvoiceLookupCriteria, type BookingInvoiceSalesInfo, type BookingRow, DIVISION_IDS, type EscapeRow, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, type GastroArticleCatalogGroup, type GastroArticleCatalogItem, type GastroSalesSyncIssue, type GastroSalesSyncResult, type GastroSalesSyncRow, type ListGastroArticlesOptions, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, type SyncGastroSalesOptions, VOUCHER_SKUS, type VisitCategory, type VoucherDeliveryType, type VoucherSku, buildBirthdayBasket, buildBookingInvoiceDraft, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findBookingForInvoice, findVoucher, gastroGroupName, getBookingInvoiceDraft, isGastroGroup, listGastroArticles, mapBirthdayBooking, mapEscapeBooking, renderBookingInvoiceHtml, syncGastroSales };

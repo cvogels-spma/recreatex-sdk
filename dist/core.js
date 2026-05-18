@@ -157,20 +157,40 @@ var ArticlesModule = class {
       Includes: {
         Price: criteria.includes?.price ?? true,
         ImageUrl: criteria.includes?.imageUrl ?? true,
+        ...criteria.includes?.image !== void 0 && { Image: criteria.includes.image },
+        ...criteria.includes?.group !== void 0 && { Group: criteria.includes.group },
         Vat: criteria.includes?.vat ?? true,
+        ...criteria.includes?.stock !== void 0 && { Stock: criteria.includes.stock },
+        ...criteria.includes?.barcodes !== void 0 && { Barcodes: criteria.includes.barcodes },
+        ...criteria.includes?.activePeriods !== void 0 && { ActivePeriods: criteria.includes.activePeriods },
+        ...criteria.includes?.articleCategories !== void 0 && { ArticleCategories: criteria.includes.articleCategories },
+        ...criteria.includes?.soldOutArticles !== void 0 && { SoldOutArticles: criteria.includes.soldOutArticles },
+        ...criteria.includes?.saleArticles !== void 0 && { SaleArticles: criteria.includes.saleArticles },
+        ...criteria.includes?.rentArticles !== void 0 && { RentArticles: criteria.includes.rentArticles },
+        ...criteria.includes?.freeArticles !== void 0 && { FreeArticles: criteria.includes.freeArticles },
         Translations: criteria.includes?.translations ?? false,
         ...criteria.includes?.priceInfo !== void 0 && { PriceInfo: criteria.includes.priceInfo }
       }
     };
+    if (criteria.articleId) SearchCriteria.ArticleID = criteria.articleId;
+    if (criteria.articleGroupId) SearchCriteria.ArticleGroupId = criteria.articleGroupId;
     if (criteria.namePattern) SearchCriteria.NamePattern = criteria.namePattern;
     if (criteria.code) SearchCriteria.Code = criteria.code;
+    if (criteria.barcode) SearchCriteria.Barcode = criteria.barcode;
     if (criteria.divisionId) SearchCriteria.DivisionId = criteria.divisionId;
+    if (criteria.includeDetail !== void 0) SearchCriteria.IncludeDetail = criteria.includeDetail;
+    if (criteria.stockLocationId) SearchCriteria.StockLocationId = criteria.stockLocationId;
+    if (criteria.articleCategoryId) SearchCriteria.ArticleCategoryId = criteria.articleCategoryId;
+    if (criteria.forVouchers !== void 0) SearchCriteria.ForVouchers = criteria.forVouchers;
+    if (criteria.ignoreActivePeriodsFilter !== void 0) {
+      SearchCriteria.IgnoreActivePeriodsFilter = criteria.ignoreActivePeriodsFilter;
+    }
     const data = await this.client.post(
       "Json/Articles/FindArticles",
       { SearchCriteria },
       callOpts ?? {}
     );
-    return data.articles ?? [];
+    return data.result?.articles ?? data.articles ?? [];
   }
   /**
    * Fetch all articles matching the criteria. Pages internally.
@@ -188,6 +208,18 @@ var ArticlesModule = class {
       pageOptions
     );
   }
+  /** Fetch a single article by GUID. */
+  async findArticleById(articleId, callOpts) {
+    const articles = await this.findArticlesPage(
+      {
+        articleId,
+        pageSize: 1,
+        includes: { price: true, imageUrl: true, vat: true, group: true }
+      },
+      callOpts
+    );
+    return articles[0];
+  }
   /** List all article groups (e.g. F&B categories, voucher types). */
   async listArticleGroups(callOpts) {
     const data = await this.client.post(
@@ -197,7 +229,238 @@ var ArticlesModule = class {
     );
     return data.articleGroups ?? [];
   }
+  /** Detailed price information for an article, optionally customer-specific. */
+  async getArticlePriceInformation(criteria, callOpts) {
+    const SearchCriteria = { ArticleId: criteria.articleId };
+    if (criteria.customerId) SearchCriteria.CustomerId = criteria.customerId;
+    const data = await this.client.post(
+      "Json/Articles/GetArticlePriceInformation",
+      { SearchCriteria },
+      callOpts ?? {}
+    );
+    return data.articlePriceInformation ?? data.ArticlePriceInformation ?? data.result?.articlePriceInformation ?? data.result?.ArticlePriceInformation;
+  }
+  /** Fetch a single page of historical sold article lines. */
+  async findArticleSalesOrdersPage(criteria = {}, callOpts) {
+    const SearchCriteria = {
+      Paging: {
+        PageIndex: criteria.pageIndex ?? 0,
+        PageSize: criteria.pageSize ?? 200
+      }
+    };
+    if (criteria.id) SearchCriteria.Id = criteria.id;
+    if (criteria.personId) SearchCriteria.PersonId = criteria.personId;
+    if (criteria.from) SearchCriteria.From = criteria.from;
+    if (criteria.until) SearchCriteria.Until = criteria.until;
+    if (criteria.type !== void 0) SearchCriteria.Type = encodeArticleSalesOrderType(criteria.type);
+    const data = await this.client.post(
+      "Json/Articles/FindArticleSalesOrders",
+      { SearchCriteria },
+      callOpts ?? {}
+    );
+    return data.articleSalesOrders ?? data.ArticleSalesOrders ?? data.result?.articleSalesOrders ?? data.result?.ArticleSalesOrders ?? [];
+  }
+  /** Fetch all historical sold article lines matching the criteria. */
+  async findArticleSalesOrders(criteria = {}, paginateOpts = {}, callOpts) {
+    const pageOptions = {
+      pageSize: criteria.pageSize ?? 200,
+      ...paginateOpts
+    };
+    return paginate(
+      ({ pageIndex, pageSize }) => this.findArticleSalesOrdersPage({ ...criteria, pageIndex, pageSize }, callOpts),
+      pageOptions
+    );
+  }
+  /**
+   * Article dossier: current catalogue/price data plus sold quantity,
+   * revenue and a day/month history for a single article.
+   */
+  async getArticleSalesReport(criteria, paginateOpts = {}, callOpts) {
+    const article = await this.resolveReportArticle(criteria, callOpts);
+    const articleId = criteria.articleId ?? article?.id;
+    const matchMode = criteria.matchMode ?? "exact";
+    const sales = await this.findArticleSalesOrders(
+      {
+        from: criteria.from,
+        until: criteria.until,
+        personId: criteria.personId,
+        type: criteria.type ?? "Sales",
+        pageSize: criteria.pageSize ?? 200
+      },
+      paginateOpts,
+      callOpts
+    );
+    const lines = sales.filter((line) => matchesArticleSalesOrder(line, { article, articleId, criteria, matchMode })).map(toReportLine);
+    const totals = summarizeLines(lines);
+    const history = groupLines(lines, criteria.historyGroup ?? "day");
+    const priceInfo = articleId ? await this.getArticlePriceInformation({ articleId }, callOpts) : void 0;
+    const report = {
+      ...article && { article },
+      ...articleId && { articleId },
+      currentPrice: article?.price ?? priceInfo?.totalPrice ?? null,
+      ...priceInfo && { priceInfo },
+      from: criteria.from,
+      until: criteria.until,
+      matchMode,
+      totals,
+      history
+    };
+    if (criteria.includeLines ?? true) report.lines = lines;
+    return report;
+  }
+  async resolveReportArticle(criteria, callOpts) {
+    if (criteria.articleId) {
+      return this.findArticleById(criteria.articleId, callOpts);
+    }
+    if (!criteria.code && !criteria.namePattern) return void 0;
+    const matches = await this.findArticles(
+      {
+        code: criteria.code,
+        namePattern: criteria.namePattern,
+        divisionId: criteria.divisionId,
+        includes: { price: true, imageUrl: true, vat: true, group: true }
+      },
+      { pageSize: criteria.pageSize ?? 50, maxPages: 5 },
+      callOpts
+    );
+    if (matches.length === 0) {
+      throw new Error("Article sales report: no article matched the given criteria");
+    }
+    if (criteria.code) {
+      const exactCode = matches.find((a) => same(a.code, criteria.code));
+      if (exactCode) return exactCode;
+    }
+    if (criteria.namePattern) {
+      const exactName = matches.filter((a) => same(a.name, criteria.namePattern));
+      if (exactName.length === 1) return exactName[0];
+    }
+    if (matches.length === 1) return matches[0];
+    const labels = matches.slice(0, 5).map((a) => `${a.code || "?"} \xB7 ${a.name}`).join(", ");
+    throw new Error(
+      `Article sales report: multiple articles matched; narrow by code or articleId (${labels})`
+    );
+  }
 };
+function same(a, b) {
+  return normalize(a) === normalize(b);
+}
+function normalize(v) {
+  return (v ?? "").trim().toLocaleLowerCase("de-DE");
+}
+var ARTICLE_SALES_ORDER_TYPE_VALUES = {
+  All: 0,
+  Sales: 1,
+  Warranty: 2,
+  WaitingList: 3,
+  Service: 4,
+  ChipKnip: 5,
+  LessonGroup: 6,
+  Purchase: 7,
+  PriceGroup: 8,
+  Credit: 9,
+  Rental: 10,
+  Subscription: 11,
+  PurchaseCredit: 12,
+  Family: 13,
+  GiftCertificate: 14,
+  ConsumptionCoupon: 15,
+  FollowUp: 16,
+  SpendingCredit: 17,
+  ETicket: 18
+};
+function encodeArticleSalesOrderType(type) {
+  return typeof type === "string" ? ARTICLE_SALES_ORDER_TYPE_VALUES[type] ?? type : type;
+}
+function matchesArticleSalesOrder(line, opts) {
+  const lineArticleId = readString(line, "articleId", "ArticleId", "ArticleID") ?? readNestedId(line, "article", "Article");
+  if (opts.articleId && lineArticleId && same(lineArticleId, opts.articleId)) return true;
+  const lineCode = readString(line, "articleCode", "code", "Code") ?? readNestedString(line, ["article", "Article"], ["code", "Code"]);
+  if (opts.article?.code && lineCode && same(lineCode, opts.article.code)) return true;
+  if (opts.criteria.code && lineCode && same(lineCode, opts.criteria.code)) return true;
+  const description = normalize(
+    readString(line, "description", "Description", "articleName", "name", "Name") ?? readNestedString(line, ["article", "Article"], ["name", "Name"]) ?? ""
+  );
+  const articleName = normalize(opts.article?.name ?? opts.criteria.namePattern);
+  if (!articleName || !description) return false;
+  return opts.matchMode === "includes" ? description.includes(articleName) : description === articleName;
+}
+function toReportLine(line) {
+  const quantity = readNumber(line, "quantity", "Quantity") ?? 0;
+  const unitPrice = readNumber(line, "unitPrice", "UnitPrice") ?? 0;
+  const totalPrice = readNumber(line, "totalPrice", "TotalPrice") ?? round2(quantity * unitPrice);
+  const out = {
+    saleLineId: readString(line, "id", "Id") ?? "",
+    date: readString(line, "date", "Date") ?? "",
+    description: readString(line, "description", "Description") ?? "",
+    quantity,
+    unitPrice,
+    totalPrice
+  };
+  const personId = readString(line, "personId", "PersonId");
+  if (personId !== void 0) out.personId = personId;
+  const number = readNumber(line, "number", "Number");
+  if (number !== void 0) out.number = number;
+  const sequenceNumber = readNumber(line, "sequenceNumber", "SequenceNumber");
+  if (sequenceNumber !== void 0) out.sequenceNumber = sequenceNumber;
+  return out;
+}
+function summarizeLines(lines) {
+  const quantity = round2(lines.reduce((sum, line) => sum + line.quantity, 0));
+  const totalPrice = round2(lines.reduce((sum, line) => sum + line.totalPrice, 0));
+  return {
+    quantity,
+    totalPrice,
+    lineCount: lines.length,
+    averageUnitPrice: quantity > 0 ? round2(totalPrice / quantity) : null
+  };
+}
+function groupLines(lines, group) {
+  const buckets = /* @__PURE__ */ new Map();
+  for (const line of lines) {
+    const period = group === "month" ? line.date.slice(0, 7) : line.date.slice(0, 10);
+    const existing = buckets.get(period) ?? [];
+    existing.push(line);
+    buckets.set(period, existing);
+  }
+  return [...buckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([period, bucket]) => ({ period, ...summarizeLines(bucket) }));
+}
+function readString(obj, ...keys) {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string") return value;
+  }
+  return void 0;
+}
+function readNumber(obj, ...keys) {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "number") return value;
+  }
+  return void 0;
+}
+function readNestedId(obj, ...keys) {
+  for (const key of keys) {
+    const value = obj[key];
+    if (value && typeof value === "object") {
+      const id = readString(value, "id", "Id", "ID");
+      if (id) return id;
+    }
+  }
+  return void 0;
+}
+function readNestedString(obj, objectKeys, valueKeys) {
+  for (const objectKey of objectKeys) {
+    const value = obj[objectKey];
+    if (value && typeof value === "object") {
+      const found = readString(value, ...valueKeys);
+      if (found) return found;
+    }
+  }
+  return void 0;
+}
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
 
 // src/core/helpers/dates.ts
 var DEFAULT_TZ = "Europe/Berlin";
@@ -517,6 +780,72 @@ var GeneralModule = class {
     );
     return data.sales ?? [];
   }
+  // ---- Discount codes / vouchers ---------------------------------------
+  /** Validate and calculate coupon-code discounts for the current basket. */
+  async couponCalculate(basket, callOpts) {
+    const data = await this.client.post(
+      "Json/General/CouponCalculate",
+      { Criteria: { Basket: basket } },
+      callOpts ?? {}
+    );
+    const result = data.couponCalculateResult ?? data.CouponCalculateResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("CouponCalculate: no result in response");
+    return normalizeCouponResult(result);
+  }
+  /** Reserve coupon-code discounts for checkout; release with {@link couponRelease}. */
+  async couponReserve(basket, callOpts) {
+    const data = await this.client.post(
+      "Json/General/CouponReserve",
+      { Criteria: { Basket: basket } },
+      callOpts ?? {}
+    );
+    const result = data.couponReserveResult ?? data.CouponReserveResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("CouponReserve: no result in response");
+    return {
+      ...normalizeCouponResult(result),
+      couponReservations: result.couponReservations ?? []
+    };
+  }
+  /** Release coupon reservations tied to the current session id. */
+  async couponRelease(callOpts) {
+    const data = await this.client.post(
+      "Json/General/CouponRelease",
+      {},
+      callOpts ?? {}
+    );
+    const result = data.couponReleaseResult ?? data.CouponReleaseResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("CouponRelease: no result in response");
+    return result;
+  }
+  /** Calculate gift-certificate discounts for the current basket. */
+  async giftCertificateCalculate(basket, callOpts) {
+    const data = await this.client.post(
+      "Json/General/GiftCertificateCalculate",
+      { Criteria: { Basket: basket } },
+      callOpts ?? {}
+    );
+    const result = data.giftCertificateCalculateResult ?? data.GiftCertificateCalculateResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("GiftCertificateCalculate: no result in response");
+    return {
+      ...result,
+      discounts: result.discounts ?? []
+    };
+  }
+  /** Validate voucher codes and return voucher states / linked coupon details. */
+  async voucherValidate(voucherCodes, callOpts) {
+    const data = await this.client.post(
+      "Json/General/VoucherValidate",
+      { Criteria: { VoucherCodes: voucherCodes } },
+      callOpts ?? {}
+    );
+    const result = data.voucherValidateResult ?? data.VoucherValidateResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("VoucherValidate: no result in response");
+    return {
+      ...result,
+      voucherStates: result.voucherStates ?? [],
+      couponDetails: result.couponDetails ?? []
+    };
+  }
   // ---- Basket flow -------------------------------------------------------
   /** Recalculate prices, discounts, VAT for a basket without committing. */
   async reCalculateBasket(basket, callOpts) {
@@ -608,6 +937,12 @@ var GeneralModule = class {
     );
   }
 };
+function normalizeCouponResult(result) {
+  return {
+    ...result,
+    discounts: result.discounts ?? []
+  };
+}
 
 // src/core/modules/manager.ts
 var ManagerModule = class {
@@ -692,6 +1027,20 @@ var DocumentsModule = class {
     const lang = language ?? this.client.options.language ?? "de";
     const shopId = this.client.options.shopId;
     const url = `${this.base}/Help/GiftCertificates/${shopId}/${lang}`;
+    return this.client.getBinary(url, callOpts ?? {});
+  }
+  /** Download the configured OrganisedVisit PDF for a historical booking. */
+  async organisedVisitPdf(req, callOpts) {
+    const lang = req.language ?? this.client.options.language ?? "de";
+    const shopId = req.shopId ?? this.client.options.shopId;
+    const url = `${this.base}/OrganisedVisits/${shopId}/${lang}/${req.organisedVisitId}`;
+    return this.client.getBinary(url, callOpts ?? {});
+  }
+  /** Discover merge-fields supported by the configured OrganisedVisit template. */
+  async organisedVisitHelp(language, callOpts) {
+    const lang = language ?? this.client.options.language ?? "de";
+    const shopId = this.client.options.shopId;
+    const url = `${this.base}/Help/OrganisedVisits/${shopId}/${lang}`;
     return this.client.getBinary(url, callOpts ?? {});
   }
 };

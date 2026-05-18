@@ -152,6 +152,8 @@ export interface OrganisedVisitSaleInfo {
   id: string;
   salesNo: number;
   salesDate: RecreatexDateTime;
+  invoiceNumber?: number;
+  invoiceDate?: RecreatexDateTime;
   guest?: OrganisedVisitSaleGuest;
 }
 
@@ -171,6 +173,9 @@ export interface OrganisedVisit {
   person?: OrganisedVisitPerson;
   orderNumber?: string;
   purchaseDate?: RecreatexDateTime;
+  salesNo?: number;
+  coupon?: string | null;
+  couponDiscount?: number;
   periodReservations?: OrganisedVisitPeriodReservation[];
   articles?: OrganisedVisitArticle[];
   salesInfos?: OrganisedVisitSaleInfo[];

@@ -4,6 +4,9 @@ If you are an AI agent reading this for the first time, internalise this
 file before writing code against `recreatex-sdk`. Most "Recreatex
 returned a weird error" sessions end on one of the items below.
 
+For business workflows, read [`WORKFLOWS.md`](WORKFLOWS.md) after this
+pitfall list. For raw endpoint coverage, read [`ENDPOINTS.md`](ENDPOINTS.md).
+
 ## Auth
 
 Every JSON request body is `{ Context, ...payload }`. Context fields:
@@ -20,6 +23,10 @@ Every JSON request body is `{ Context, ...payload }`. Context fields:
 The `ReCreateXClient` builds this for you. **Never hand-craft Context** —
 you'll forget a field. Use `client.post()` if you must reach a custom
 endpoint.
+
+Never commit live credentials, customer exports, voucher codes from real
+customers, booking PDFs, or raw booking data. Use environment variables or a
+gitignored local env file for live checks.
 
 For Space Magic the canonical IDs are exported as
 `recreatex-sdk/spacemagic` constants:
@@ -50,6 +57,11 @@ For Space Magic the canonical IDs are exported as
 | `OrganisedVisitValidPriceGroupsRule` despite a valid-looking PriceGroupId | The "real" `PriceGroupId` is `prices[].group.id` from `Expositions/FindExpositions(Includes.Pricing=true)`. The field that `FindExpositionOverviewByDay` returns under the name `priceGroupId` is actually a **price id** (= `prices[].id`) and is rejected by the basket validator. |
 | `ExpositionPeriodReservation` checkout fails with "Die Ausstellungsreservierung muss gesperrt sein" | Required pre-step: `General/LockBasketItems` returns the same items with a fresh `LockTicket` (~10 min expiry). Inject the locked items into the basket before `CheckoutBasket`. The `buildBirthdayBasket` helper does NOT lock — wrap the call yourself or use the higher-level wrapper in `space-magic-birthday-landing-page/functions/_shared/recreatex.js#createBirthdayOrganisedVisit`. |
 | 50 % deposit not visible as "open balance" | Set `Basket.Payments[0].Amount = depositAmount`, `Basket.Balance = grossTotal - depositAmount`, leave `Basket.PayLater = false`. Recreatex echoes the deposit back as `advancementPrice` on the locked item and shows the rest as a remaining balance on the OrganisedVisit. |
+| Need all concrete gastro articles | Start with `listGastroArticles(rx)` from `recreatex-sdk/spacemagic`; it expands the known gastro article groups into concrete articles with id/code/name/price. Use those ids/codes for article-level reports. |
+| Long-range gastro article sales | Use `syncGastroSales(rx, { fromYmd, untilYmd })`. It queries sales day-by-day so Recreatex pagination does not silently hide older lines in a large month/year query. Non-gastro unmatched lines are suppressed unless `includeUnmatchedIssues: true`. |
+| Article-level sales history | Use `articles.getArticleSalesReport()` / `FindArticleSalesOrders`. The public docs expose date/person/type filters, not a reliable ArticleId filter, so the SDK matches returned sales lines by article id/code when present and falls back to the line description. Prefer exact `code` or `articleId` when you have it. The live API rejects string enum values like `"Sales"` here; the SDK maps them to numeric enum values before sending. |
+| Need a post-hoc booking invoice | `getBookingInvoiceDraft()` can build invoice-ready rows from an OrganisedVisit, but the public API does not expose a "create official Recreatex invoice now" mutation. Use `documents.organisedVisitPdf()` for the Recreatex booking PDF if a template exists, or render your own invoice from the draft. |
+| List all coupon codes | Public JSON API supports `CouponCalculate`, `CouponReserve`, `CouponRelease`, and `VoucherValidate` for known codes. It does not expose a "list all historical/future coupon definitions" endpoint in the docs. |
 
 ## Two date formats
 
@@ -73,6 +85,13 @@ const visits = await rx.expositions.findOrganisedVisits({
   fromYmd: '2026-04-01',
   untilYmd: '2026-04-30',
 });
+
+const hamburger = await rx.articles.getArticleSalesReport({
+  namePattern: 'Hamburger',
+  from: '2026-05-01 00:00:00.000',
+  until: '2026-05-31 23:59:59.000',
+});
+// hamburger.totals.quantity, hamburger.currentPrice, hamburger.history
 
 // error path
 import { RecreatexApiError, RecreatexHttpError } from 'recreatex-sdk/core';

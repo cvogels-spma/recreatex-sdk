@@ -6,12 +6,17 @@ this for you).
 
 Base URL: `https://wsdlspacemagic.recreatex.be`. The document service
 sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
+For business-level recipes that compose these endpoints, see
+[`WORKFLOWS.md`](WORKFLOWS.md).
 
 | Module | Method on `client.*` | Wire path | Use case |
 |---|---|---|---|
 | `articles` | `findArticles(criteria)` | `/Json/Articles/FindArticles/` | Catalogue (auto-pages) |
 | `articles` | `findArticlesPage(criteria)` | `/Json/Articles/FindArticles/` | Single page |
 | `articles` | `listArticleGroups()` | `/Json/Articles/ListArticleGroups/` | Group taxonomy |
+| `articles` | `getArticlePriceInformation({ articleId })` | `/Json/Articles/GetArticlePriceInformation/` | Detailed current price |
+| `articles` | `findArticleSalesOrders(criteria)` | `/Json/Articles/FindArticleSalesOrders/` | Sold article line history |
+| `articles` | `getArticleSalesReport(criteria)` | composed | Article dossier: price, sold quantity, revenue, history |
 | `expositions` | `findExpositions(criteria)` | `/Json/Expositions/FindExpositions/` | Rooms by name |
 | `expositions` | `findPeriodDates(id, fromIso, untilIso)` | `/Json/Expositions/FindExpositionPeriodDates/` | Free days |
 | `expositions` | `findOverviewByDay(id, ymd)` | `/Json/Expositions/FindExpositionOverviewByDay/` | Slots + capacity (no period id!) |
@@ -28,6 +33,11 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `general` | `listPaymentMethods()` | `/Json/General/ListPaymentMethods/` | 32 payment methods |
 | `general` | `findPerson(criteria)` | `/Json/General/FindPerson/` | Person lookup |
 | `general` | `findSales(criteria)` | `/Json/General/FindSales/` | Low-level transactions |
+| `general` | `couponCalculate(basket)` | `/Json/General/CouponCalculate/` | Validate/calculate coupon discounts |
+| `general` | `couponReserve(basket)` | `/Json/General/CouponReserve/` | Reserve coupon discounts for checkout |
+| `general` | `couponRelease()` | `/Json/General/CouponRelease/` | Release coupon reservations for the session |
+| `general` | `giftCertificateCalculate(basket)` | `/Json/General/GiftCertificateCalculate/` | Calculate gift-certificate discounts |
+| `general` | `voucherValidate(codes)` | `/Json/General/VoucherValidate/` | Validate voucher codes |
 | `general` | `reCalculateBasket(basket)` | `/Json/General/ReCalculateBasket/` | Basket totals |
 | `general` | `lockBasketItems(items)` | `/Json/General/LockBasketItems/` | Reserve items for payment |
 | `general` | `checkoutBasket(basket)` | `/Json/General/CheckoutBasket/` | Finalise sale |
@@ -37,6 +47,8 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `manager` | `listVisitingCustomersInformation(criteria)` | `/Json/ManagerApp/ListVisitingCustomersInformation/` | Visitor scans |
 | `documents` | `giftCertificatePdf({ salesLineId })` | `/WebShopDocumentService.svc/GiftCertificates/{ShopId}/{lang}/{SalesLineId}` | Voucher PDF |
 | `documents` | `giftCertificateHelp(lang)` | `/WebShopDocumentService.svc/Help/GiftCertificates/{ShopId}/{lang}` | Template merge-fields |
+| `documents` | `organisedVisitPdf({ organisedVisitId })` | `/WebShopDocumentService.svc/OrganisedVisits/{ShopId}/{lang}/{OrganisedVisitId}` | Historical booking PDF |
+| `documents` | `organisedVisitHelp(lang)` | `/WebShopDocumentService.svc/Help/OrganisedVisits/{ShopId}/{lang}` | Booking template merge-fields |
 
 ## Date formats
 
@@ -49,11 +61,125 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 
 Endpoints that accept `Paging: { PageIndex, PageSize }`:
 - `Articles/FindArticles`
+- `Articles/FindArticleSalesOrders`
 - `Expositions/FindExpositions`
 - `Expositions/FindOrganisedVisits`
 
 The SDK exposes both `findXyz()` (auto-pages) and `findXyzPage()` (single
-page). Default `PageSize`: 200 for visits, 50 for articles/expositions.
+page). Default `PageSize`: 200 for visits/article sales orders, 50 for
+articles/expositions.
+
+## Article-level sales
+
+Use `listGastroArticles(rx)` from `recreatex-sdk/spacemagic` to map the
+known Space Magic gastro article groups to their concrete Recreatex articles
+before building item-level reports:
+
+```ts
+const catalog = await listGastroArticles(rx);
+const rows = catalog.flatMap((group) =>
+  group.articles.map((article) => ({
+    group: group.groupName,
+    code: article.code,
+    name: article.name,
+    price: article.price,
+    articleId: article.id,
+  })),
+);
+console.table(rows);
+```
+
+Use `syncGastroSales(rx, { fromYmd, untilYmd })` for robust article-level
+gastro sales over longer windows. It pulls `FindArticleSalesOrders` day by
+day and maps sales lines onto the known gastro catalogue without
+double-counting ambiguous description-only matches. Non-gastro/unmatched
+sales lines stay quiet unless `includeUnmatchedIssues: true` is set.
+
+Use `articles.getArticleSalesReport()` for the common “Hamburger dossier”
+case:
+
+```ts
+const report = await rx.articles.getArticleSalesReport({
+  namePattern: 'Hamburger',
+  from: '2026-05-01 00:00:00.000',
+  until: '2026-05-31 23:59:59.000',
+});
+
+console.log(report.currentPrice);          // catalogue / price-info price
+console.log(report.totals.quantity);       // sold units
+console.log(report.totals.totalPrice);     // gross line total
+console.log(report.history);               // daily buckets by default
+```
+
+`FindArticleSalesOrders` returns sold article lines with description/date/
+quantity/unit price/total price. The public Recreatex PDF documents it as an
+article history endpoint; if the JSON response includes article ids/codes the
+SDK matches on those, otherwise it falls back to the sales-line description.
+The live endpoint expects numeric `Type` enum values; the SDK accepts friendly
+strings like `'Sales'` and translates them before sending.
+
+## Revenue and visitors
+
+Use `manager.listSalesInformation()` for revenue dashboard aggregates:
+
+```ts
+const sales = await rx.manager.listSalesInformation({
+  from: '2026-05-18 00:00:00.000',
+  until: '2026-05-18 23:59:59.000',
+  groupByDate: true,
+  groupByDivision: true,
+  groupByArticleGroup: true,
+});
+```
+
+Use `general.findAccessZones({ today: true })` for live visitor counts:
+
+```ts
+const zones = await rx.general.findAccessZones({
+  today: true,
+  includes: { occupancy: true },
+});
+```
+
+`FindAccessZones` is live-only for occupancy. For historical visitor charts,
+persist snapshots or use `ListVisitingCustomersInformation` as a scan-based
+metric with a clear label.
+
+## Discounts
+
+Coupon/voucher endpoints support validation and checkout reservation, not a
+public "list all historic/future discount codes" query. Known codes can be
+checked with:
+
+```ts
+const coupon = await rx.general.couponCalculate({
+  CustomerId: GUEST_CUSTOMER_ID,
+  Items: [],
+  CouponCodes: ['OPENING10'],
+});
+const voucher = await rx.general.voucherValidate(['OPENING10']);
+```
+
+## Booking Documents
+
+Historical OrganisedVisits can be retrieved by id/order number and converted
+to invoice-ready data via `getBookingInvoiceDraft()` from
+`recreatex-sdk/spacemagic`. If an OrganisedVisit PDF template is configured in
+Recreatex, download it with `rx.documents.organisedVisitPdf({ organisedVisitId })`.
+
+```ts
+const draft = await getBookingInvoiceDraft(rx, {
+  orderNumber: '...',
+});
+
+const pdf = await rx.documents.organisedVisitPdf({
+  organisedVisitId: draft.bookingId,
+});
+```
+
+The public JSON API exposes retrieval, not an official "create a new
+back-office invoice" mutation. Render your own invoice/pro-forma document from
+the draft when Recreatex does not already have the needed PDF.
 
 ## Response shape conventions
 

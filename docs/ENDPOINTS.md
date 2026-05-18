@@ -100,6 +100,8 @@ console.log(report.history);               // daily buckets by default
 quantity/unit price/total price. The public Recreatex PDF documents it as an
 article history endpoint; if the JSON response includes article ids/codes the
 SDK matches on those, otherwise it falls back to the sales-line description.
+The live endpoint expects numeric `Type` enum values; the SDK accepts friendly
+strings like `'Sales'` and translates them before sending.
 
 ## Response shape conventions
 

@@ -76,22 +76,151 @@ interface ArticleGroup {
 }
 /** Search input for `Articles/FindArticles`. */
 interface FindArticlesCriteria {
+    /** Exact article GUID. Wire name is `ArticleID` in the Recreatex docs. */
+    articleId?: string;
+    /** Restrict to an article group GUID. */
+    articleGroupId?: string;
     /** Substring match on article name. */
     namePattern?: string;
     /** Exact code match. */
     code?: string;
+    /** Exact barcode match. */
+    barcode?: string;
     /** Restrict to a division (e.g. `DIVISION_IDS.spaceMagic`). */
     divisionId?: string;
+    /** Include article options, ingredients and warehouses. */
+    includeDetail?: boolean;
+    /** Restrict to a stock location / warehouse. */
+    stockLocationId?: string;
+    /** Restrict to an article category. */
+    articleCategoryId?: string;
+    /** Restrict to voucher-marked articles. */
+    forVouchers?: boolean;
+    /** Ignore configured active-period filters. */
+    ignoreActivePeriodsFilter?: boolean;
     /** Page index/size; SDK's `paginate: 'auto'` mode iterates these for you. */
     pageIndex?: number;
     pageSize?: number;
     includes?: {
         price?: boolean;
         imageUrl?: boolean;
+        image?: boolean;
+        group?: boolean;
         vat?: boolean;
+        stock?: boolean;
+        barcodes?: boolean;
+        activePeriods?: boolean;
+        articleCategories?: boolean;
+        soldOutArticles?: boolean;
+        saleArticles?: boolean;
+        rentArticles?: boolean;
+        freeArticles?: boolean;
         translations?: boolean;
         priceInfo?: boolean;
     };
+}
+interface ArticlePriceInformationCriteria {
+    articleId: string;
+    customerId?: string;
+}
+interface ArticlePriceInformation {
+    totalPrice?: number;
+    priceGroup?: string | null;
+    familyComposition?: string | null;
+    subsidizationPrice?: string | number | null;
+    additionSupplementPrice?: number | null;
+    donationPrice?: number | null;
+    [extra: string]: unknown;
+}
+type ArticleSalesOrderType = 'All' | 'Sales' | 'Warranty' | 'WaitingList' | 'Service' | 'ChipKnip' | 'LessonGroup' | 'Purchase' | 'PriceGroup' | 'Credit' | 'Rental' | 'Subscription' | 'PurchaseCredit' | 'Family' | 'GiftCertificate' | 'ConsumptionCoupon' | 'FollowUp' | 'SpendingCredit' | 'ETicket';
+/** Search input for `Articles/FindArticleSalesOrders`. */
+interface FindArticleSalesOrdersCriteria {
+    /** Unique sale-line GUID. */
+    id?: string;
+    /** Customer/person GUID. Omit for all customers. */
+    personId?: string;
+    /** Recreatex datetime lower bound. */
+    from?: string;
+    /** Recreatex datetime upper bound. */
+    until?: string;
+    /** Defaults to `Sales` in high-level report helpers. */
+    type?: ArticleSalesOrderType | number;
+    pageIndex?: number;
+    pageSize?: number;
+}
+/**
+ * A historical article sales line as returned by
+ * `Articles/FindArticleSalesOrders`.
+ */
+interface ArticleSalesOrder {
+    id: string;
+    description?: string;
+    date: string;
+    personId?: string | null;
+    number?: number;
+    sequenceNumber?: number;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    /**
+     * Not listed in the public PDF, but some Recreatex JSON responses include
+     * richer article references. Report helpers use it when available.
+     */
+    articleId?: string;
+    articleCode?: string;
+    articleName?: string;
+    [extra: string]: unknown;
+}
+type ArticleSalesHistoryGroup = 'day' | 'month';
+type ArticleSalesMatchMode = 'exact' | 'includes';
+interface ArticleSalesReportCriteria {
+    from: string;
+    until: string;
+    articleId?: string;
+    code?: string;
+    namePattern?: string;
+    divisionId?: string;
+    personId?: string;
+    type?: ArticleSalesOrderType | number;
+    matchMode?: ArticleSalesMatchMode;
+    historyGroup?: ArticleSalesHistoryGroup;
+    includeLines?: boolean;
+    pageSize?: number;
+}
+interface ArticleSalesReportLine {
+    saleLineId: string;
+    date: string;
+    description: string;
+    personId?: string | null;
+    number?: number;
+    sequenceNumber?: number;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+}
+interface ArticleSalesHistoryBucket {
+    period: string;
+    quantity: number;
+    totalPrice: number;
+    lineCount: number;
+    averageUnitPrice: number | null;
+}
+interface ArticleSalesReport {
+    article?: Article;
+    articleId?: string;
+    currentPrice: number | null;
+    priceInfo?: ArticlePriceInformation;
+    from: string;
+    until: string;
+    matchMode: ArticleSalesMatchMode;
+    totals: {
+        quantity: number;
+        totalPrice: number;
+        lineCount: number;
+        averageUnitPrice: number | null;
+    };
+    history: ArticleSalesHistoryBucket[];
+    lines?: ArticleSalesReportLine[];
 }
 
 /**
@@ -133,8 +262,10 @@ declare function paginateIter<T>(fetchPage: (args: {
  * Articles namespace.
  *
  * Endpoints:
- *  - `Articles/FindArticles`     → list/search article catalogue
- *  - `Articles/ListArticleGroups` → article-group taxonomy
+ *  - `Articles/FindArticles`                → list/search article catalogue
+ *  - `Articles/ListArticleGroups`            → article-group taxonomy
+ *  - `Articles/GetArticlePriceInformation`   → detailed price info
+ *  - `Articles/FindArticleSalesOrders`       → sold article history
  */
 
 declare class ArticlesModule {
@@ -151,8 +282,22 @@ declare class ArticlesModule {
      *   const vouchers = await client.articles.findArticles({ namePattern: 'Gutschein' });
      */
     findArticles(criteria?: FindArticlesCriteria, paginateOpts?: PaginateOptions, callOpts?: CallOptions): Promise<Article[]>;
+    /** Fetch a single article by GUID. */
+    findArticleById(articleId: string, callOpts?: CallOptions): Promise<Article | undefined>;
     /** List all article groups (e.g. F&B categories, voucher types). */
     listArticleGroups(callOpts?: CallOptions): Promise<ArticleGroup[]>;
+    /** Detailed price information for an article, optionally customer-specific. */
+    getArticlePriceInformation(criteria: ArticlePriceInformationCriteria, callOpts?: CallOptions): Promise<ArticlePriceInformation | undefined>;
+    /** Fetch a single page of historical sold article lines. */
+    findArticleSalesOrdersPage(criteria?: FindArticleSalesOrdersCriteria, callOpts?: CallOptions): Promise<ArticleSalesOrder[]>;
+    /** Fetch all historical sold article lines matching the criteria. */
+    findArticleSalesOrders(criteria?: FindArticleSalesOrdersCriteria, paginateOpts?: PaginateOptions, callOpts?: CallOptions): Promise<ArticleSalesOrder[]>;
+    /**
+     * Article dossier: current catalogue/price data plus sold quantity,
+     * revenue and a day/month history for a single article.
+     */
+    getArticleSalesReport(criteria: ArticleSalesReportCriteria, paginateOpts?: PaginateOptions, callOpts?: CallOptions): Promise<ArticleSalesReport>;
+    private resolveReportArticle;
 }
 
 /**
@@ -823,4 +968,4 @@ declare function ymdWindow(before: number, after: number, today?: Date, tz?: str
     untilYmd: Ymd;
 };
 
-export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticlePriceInformation, type ArticlePriceInformationCriteria, type ArticleSalesHistoryBucket, type ArticleSalesHistoryGroup, type ArticleSalesMatchMode, type ArticleSalesOrder, type ArticleSalesOrderType, type ArticleSalesReport, type ArticleSalesReportCriteria, type ArticleSalesReportLine, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticleSalesOrdersCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };

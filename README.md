@@ -30,6 +30,14 @@ console.log(`In park right now: ${zones[0]?.occupancy?.visitorsCurrent ?? 0}`);
 const visits = await rx.expositions.findOrganisedVisits({
   fromYmd: '2026-04-01', untilYmd: '2026-04-30',
 });
+
+// Article-level sales dossier
+const hamburger = await rx.articles.getArticleSalesReport({
+  namePattern: 'Hamburger',
+  from: '2026-05-01 00:00:00.000',
+  until: '2026-05-31 23:59:59.000',
+});
+console.log(`Hamburger sold: ${hamburger.totals.quantity}`);
 ```
 
 ## Install
@@ -62,6 +70,7 @@ type-defs scraped from live captures. This SDK consolidates the lot:
   `RecreatexTimeoutError`)
 - automatic retry on network + 5xx, never on validation errors
 - auto-pagination for `FindOrganisedVisits` and `FindArticles`
+- article-level sales reports (`FindArticleSalesOrders` + price information)
 - known-pitfalls hard-coded so you don't trip the `Article: null` /
   `MissingCustomer` / `PayLater` traps
 

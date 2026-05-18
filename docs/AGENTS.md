@@ -50,6 +50,7 @@ For Space Magic the canonical IDs are exported as
 | `OrganisedVisitValidPriceGroupsRule` despite a valid-looking PriceGroupId | The "real" `PriceGroupId` is `prices[].group.id` from `Expositions/FindExpositions(Includes.Pricing=true)`. The field that `FindExpositionOverviewByDay` returns under the name `priceGroupId` is actually a **price id** (= `prices[].id`) and is rejected by the basket validator. |
 | `ExpositionPeriodReservation` checkout fails with "Die Ausstellungsreservierung muss gesperrt sein" | Required pre-step: `General/LockBasketItems` returns the same items with a fresh `LockTicket` (~10 min expiry). Inject the locked items into the basket before `CheckoutBasket`. The `buildBirthdayBasket` helper does NOT lock — wrap the call yourself or use the higher-level wrapper in `space-magic-birthday-landing-page/functions/_shared/recreatex.js#createBirthdayOrganisedVisit`. |
 | 50 % deposit not visible as "open balance" | Set `Basket.Payments[0].Amount = depositAmount`, `Basket.Balance = grossTotal - depositAmount`, leave `Basket.PayLater = false`. Recreatex echoes the deposit back as `advancementPrice` on the locked item and shows the rest as a remaining balance on the OrganisedVisit. |
+| Article-level sales history | Use `articles.getArticleSalesReport()` / `FindArticleSalesOrders`. The public docs expose date/person/type filters, not a reliable ArticleId filter, so the SDK matches returned sales lines by article id/code when present and falls back to the line description. Prefer exact `code` or `articleId` when you have it. |
 
 ## Two date formats
 
@@ -73,6 +74,13 @@ const visits = await rx.expositions.findOrganisedVisits({
   fromYmd: '2026-04-01',
   untilYmd: '2026-04-30',
 });
+
+const hamburger = await rx.articles.getArticleSalesReport({
+  namePattern: 'Hamburger',
+  from: '2026-05-01 00:00:00.000',
+  until: '2026-05-31 23:59:59.000',
+});
+// hamburger.totals.quantity, hamburger.currentPrice, hamburger.history
 
 // error path
 import { RecreatexApiError, RecreatexHttpError } from 'recreatex-sdk/core';

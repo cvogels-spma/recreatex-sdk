@@ -12,6 +12,9 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `articles` | `findArticles(criteria)` | `/Json/Articles/FindArticles/` | Catalogue (auto-pages) |
 | `articles` | `findArticlesPage(criteria)` | `/Json/Articles/FindArticles/` | Single page |
 | `articles` | `listArticleGroups()` | `/Json/Articles/ListArticleGroups/` | Group taxonomy |
+| `articles` | `getArticlePriceInformation({ articleId })` | `/Json/Articles/GetArticlePriceInformation/` | Detailed current price |
+| `articles` | `findArticleSalesOrders(criteria)` | `/Json/Articles/FindArticleSalesOrders/` | Sold article line history |
+| `articles` | `getArticleSalesReport(criteria)` | composed | Article dossier: price, sold quantity, revenue, history |
 | `expositions` | `findExpositions(criteria)` | `/Json/Expositions/FindExpositions/` | Rooms by name |
 | `expositions` | `findPeriodDates(id, fromIso, untilIso)` | `/Json/Expositions/FindExpositionPeriodDates/` | Free days |
 | `expositions` | `findOverviewByDay(id, ymd)` | `/Json/Expositions/FindExpositionOverviewByDay/` | Slots + capacity (no period id!) |
@@ -49,11 +52,36 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 
 Endpoints that accept `Paging: { PageIndex, PageSize }`:
 - `Articles/FindArticles`
+- `Articles/FindArticleSalesOrders`
 - `Expositions/FindExpositions`
 - `Expositions/FindOrganisedVisits`
 
 The SDK exposes both `findXyz()` (auto-pages) and `findXyzPage()` (single
-page). Default `PageSize`: 200 for visits, 50 for articles/expositions.
+page). Default `PageSize`: 200 for visits/article sales orders, 50 for
+articles/expositions.
+
+## Article-level sales
+
+Use `articles.getArticleSalesReport()` for the common “Hamburger dossier”
+case:
+
+```ts
+const report = await rx.articles.getArticleSalesReport({
+  namePattern: 'Hamburger',
+  from: '2026-05-01 00:00:00.000',
+  until: '2026-05-31 23:59:59.000',
+});
+
+console.log(report.currentPrice);          // catalogue / price-info price
+console.log(report.totals.quantity);       // sold units
+console.log(report.totals.totalPrice);     // gross line total
+console.log(report.history);               // daily buckets by default
+```
+
+`FindArticleSalesOrders` returns sold article lines with description/date/
+quantity/unit price/total price. The public Recreatex PDF documents it as an
+article history endpoint; if the JSON response includes article ids/codes the
+SDK matches on those, otherwise it falls back to the sales-line description.
 
 ## Response shape conventions
 

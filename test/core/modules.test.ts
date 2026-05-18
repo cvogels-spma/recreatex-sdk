@@ -34,6 +34,181 @@ describe('ArticlesModule', () => {
     expect(all).toHaveLength(62);
     expect(n).toBe(2);
   });
+
+  it('findArticlesPage sends article-level filters and detail includes', async () => {
+    const { fetch, calls } = fetchSpy({ articles: [] });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    await rx.articles.findArticlesPage({
+      articleId: 'article-1',
+      articleGroupId: 'group-1',
+      barcode: '400123456',
+      includeDetail: true,
+      includes: { group: true, barcodes: true, stock: true },
+    });
+    const body = calls[0]?.body as { SearchCriteria?: Record<string, unknown> } | null;
+    expect(body?.SearchCriteria?.ArticleID).toBe('article-1');
+    expect(body?.SearchCriteria?.ArticleGroupId).toBe('group-1');
+    expect(body?.SearchCriteria?.Barcode).toBe('400123456');
+    expect(body?.SearchCriteria?.IncludeDetail).toBe(true);
+    expect(body?.SearchCriteria?.Includes).toMatchObject({
+      Group: true,
+      Barcodes: true,
+      Stock: true,
+    });
+  });
+
+  it('getArticlePriceInformation reads the detailed price envelope', async () => {
+    const { fetch, calls } = fetchSpy({
+      articlePriceInformation: {
+        totalPrice: 6.5,
+        priceGroup: 'General',
+      },
+    });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const info = await rx.articles.getArticlePriceInformation({ articleId: 'hamburger-id' });
+    expect(info?.totalPrice).toBe(6.5);
+    const body = calls[0]?.body as { SearchCriteria?: Record<string, unknown> } | null;
+    expect(body?.SearchCriteria?.ArticleId).toBe('hamburger-id');
+    expect(calls[0]?.url).toMatch(/Json\/Articles\/GetArticlePriceInformation\/$/);
+  });
+
+  it('findArticleSalesOrders auto-paginates historical sales lines', async () => {
+    const pages = [
+      Array.from({ length: 200 }, (_, i) => ({
+        id: `line-${i}`,
+        description: 'Hamburger',
+        date: '2026-05-01 12:00:00.000',
+        quantity: 1,
+        unitPrice: 6,
+        totalPrice: 6,
+      })),
+      [
+        {
+          id: 'line-200',
+          description: 'Hamburger',
+          date: '2026-05-02 12:00:00.000',
+          quantity: 2,
+          unitPrice: 6,
+          totalPrice: 12,
+        },
+      ],
+    ];
+    let n = 0;
+    const fetch = vi.fn(async () => {
+      const page = pages[n++] ?? [];
+      return new Response(JSON.stringify({ articleSalesOrders: page }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const all = await rx.articles.findArticleSalesOrders({
+      from: '2026-05-01 00:00:00.000',
+      until: '2026-05-31 23:59:59.000',
+      type: 'Sales',
+    });
+    expect(all).toHaveLength(201);
+    expect(n).toBe(2);
+  });
+
+  it('getArticleSalesReport resolves an article and aggregates quantity/revenue history', async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
+      const body = init?.body ? JSON.parse(init.body as string) : null;
+      calls.push({ url: u, body });
+      if (u.endsWith('/Json/Articles/FindArticles/')) {
+        return new Response(
+          JSON.stringify({
+            articles: [
+              {
+                id: 'hamburger-id',
+                code: 'HAMB',
+                name: 'Hamburger',
+                price: 6,
+                divisionId: 'space',
+                allowPriceChangeWebshop: false,
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (u.endsWith('/Json/Articles/FindArticleSalesOrders/')) {
+        return new Response(
+          JSON.stringify({
+            articleSalesOrders: [
+              {
+                id: 'line-1',
+                description: 'Hamburger',
+                date: '2026-05-01 12:00:00.000',
+                quantity: 2,
+                unitPrice: 6,
+                totalPrice: 12,
+              },
+              {
+                id: 'line-2',
+                description: 'Cheeseburger',
+                date: '2026-05-01 13:00:00.000',
+                quantity: 1,
+                unitPrice: 7,
+                totalPrice: 7,
+              },
+              {
+                id: 'line-3',
+                description: 'Hamburger',
+                date: '2026-05-02 12:00:00.000',
+                quantity: 1,
+                unitPrice: 6,
+                totalPrice: 6,
+              },
+              {
+                id: 'line-4',
+                description: 'POS article sale',
+                date: '2026-05-03 12:00:00.000',
+                Article: { Id: 'hamburger-id', Code: 'HAMB', Name: 'Hamburger' },
+                quantity: 3,
+                unitPrice: 6,
+                totalPrice: 18,
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (u.endsWith('/Json/Articles/GetArticlePriceInformation/')) {
+        return new Response(JSON.stringify({ articlePriceInformation: { totalPrice: 6 } }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const report = await rx.articles.getArticleSalesReport({
+      namePattern: 'Hamburger',
+      from: '2026-05-01 00:00:00.000',
+      until: '2026-05-31 23:59:59.000',
+    });
+
+    expect(report.article?.id).toBe('hamburger-id');
+    expect(report.currentPrice).toBe(6);
+    expect(report.totals).toEqual({
+      quantity: 6,
+      totalPrice: 36,
+      lineCount: 3,
+      averageUnitPrice: 6,
+    });
+    expect(report.history).toEqual([
+      { period: '2026-05-01', quantity: 2, totalPrice: 12, lineCount: 1, averageUnitPrice: 6 },
+      { period: '2026-05-02', quantity: 1, totalPrice: 6, lineCount: 1, averageUnitPrice: 6 },
+      { period: '2026-05-03', quantity: 3, totalPrice: 18, lineCount: 1, averageUnitPrice: 6 },
+    ]);
+    expect(report.lines?.map((line) => line.saleLineId)).toEqual(['line-1', 'line-3', 'line-4']);
+    const salesCall = calls.find((call) => call.url.endsWith('/Json/Articles/FindArticleSalesOrders/'));
+    expect((salesCall?.body as { SearchCriteria?: Record<string, unknown> })?.SearchCriteria).toMatchObject({
+      Type: 'Sales',
+      From: '2026-05-01 00:00:00.000',
+      Until: '2026-05-31 23:59:59.000',
+    });
+  });
 });
 
 describe('ExpositionsModule', () => {

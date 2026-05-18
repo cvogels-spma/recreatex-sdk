@@ -9,6 +9,10 @@
  *  - `General/ListPaymentMethods`  → 32 payment methods
  *  - `General/FindPerson`          → look up person records
  *  - `General/FindSales`           → low-level transactions
+ *  - `General/CouponCalculate`     → validate/calculate discount codes
+ *  - `General/CouponReserve`       → reserve discount codes for checkout
+ *  - `General/CouponRelease`       → release reserved discount codes
+ *  - `General/VoucherValidate`     → validate voucher codes
  *  - `General/ReCalculateBasket`   → totals/discounts (web shop flow)
  *  - `General/LockBasketItems`     → reserve items (web shop flow)
  *  - `General/CheckoutBasket`      → finalise + create sale (web shop flow)
@@ -26,6 +30,11 @@ import type {
   FindPersonCriteria,
   Sale,
   FindSalesCriteria,
+  CouponCalculationResult,
+  CouponReservationResult,
+  CouponReleaseResult,
+  GiftCertificateCalculationResult,
+  VoucherValidateResult,
   GiftCertificate,
   FindGiftCertificatesCriteria,
 } from '../types/general.js';
@@ -80,6 +89,51 @@ interface FindSalesResponse {
 interface FindGiftCertificatesResponse {
   findGiftCertificatesResult?: { giftCertificates?: GiftCertificate[] };
   giftCertificates?: GiftCertificate[];
+  succes?: boolean;
+  message?: string;
+}
+
+interface CouponCalculateResponse {
+  couponCalculateResult?: CouponCalculationResult;
+  CouponCalculateResult?: CouponCalculationResult;
+  result?: CouponCalculationResult;
+  Result?: CouponCalculationResult;
+  succes?: boolean;
+  message?: string;
+}
+
+interface CouponReserveResponse {
+  couponReserveResult?: CouponReservationResult;
+  CouponReserveResult?: CouponReservationResult;
+  result?: CouponReservationResult;
+  Result?: CouponReservationResult;
+  succes?: boolean;
+  message?: string;
+}
+
+interface CouponReleaseResponse {
+  couponReleaseResult?: CouponReleaseResult;
+  CouponReleaseResult?: CouponReleaseResult;
+  result?: CouponReleaseResult;
+  Result?: CouponReleaseResult;
+  succes?: boolean;
+  message?: string;
+}
+
+interface GiftCertificateCalculateResponse {
+  giftCertificateCalculateResult?: GiftCertificateCalculationResult;
+  GiftCertificateCalculateResult?: GiftCertificateCalculationResult;
+  result?: GiftCertificateCalculationResult;
+  Result?: GiftCertificateCalculationResult;
+  succes?: boolean;
+  message?: string;
+}
+
+interface VoucherValidateResponse {
+  voucherValidateResult?: VoucherValidateResult;
+  VoucherValidateResult?: VoucherValidateResult;
+  result?: VoucherValidateResult;
+  Result?: VoucherValidateResult;
   succes?: boolean;
   message?: string;
 }
@@ -232,6 +286,104 @@ export class GeneralModule {
     return data.sales ?? [];
   }
 
+  // ---- Discount codes / vouchers ---------------------------------------
+
+  /** Validate and calculate coupon-code discounts for the current basket. */
+  async couponCalculate(basket: Basket, callOpts?: CallOptions): Promise<CouponCalculationResult> {
+    const data = await this.client.post<CouponCalculateResponse>(
+      'Json/General/CouponCalculate',
+      { Criteria: { Basket: basket } },
+      callOpts ?? {},
+    );
+    const result =
+      data.couponCalculateResult ??
+      data.CouponCalculateResult ??
+      data.result ??
+      data.Result;
+    if (!result) throw new Error('CouponCalculate: no result in response');
+    return normalizeCouponResult(result);
+  }
+
+  /** Reserve coupon-code discounts for checkout; release with {@link couponRelease}. */
+  async couponReserve(basket: Basket, callOpts?: CallOptions): Promise<CouponReservationResult> {
+    const data = await this.client.post<CouponReserveResponse>(
+      'Json/General/CouponReserve',
+      { Criteria: { Basket: basket } },
+      callOpts ?? {},
+    );
+    const result =
+      data.couponReserveResult ??
+      data.CouponReserveResult ??
+      data.result ??
+      data.Result;
+    if (!result) throw new Error('CouponReserve: no result in response');
+    return {
+      ...normalizeCouponResult(result),
+      couponReservations: result.couponReservations ?? [],
+    };
+  }
+
+  /** Release coupon reservations tied to the current session id. */
+  async couponRelease(callOpts?: CallOptions): Promise<CouponReleaseResult> {
+    const data = await this.client.post<CouponReleaseResponse>(
+      'Json/General/CouponRelease',
+      {},
+      callOpts ?? {},
+    );
+    const result =
+      data.couponReleaseResult ??
+      data.CouponReleaseResult ??
+      data.result ??
+      data.Result;
+    if (!result) throw new Error('CouponRelease: no result in response');
+    return result;
+  }
+
+  /** Calculate gift-certificate discounts for the current basket. */
+  async giftCertificateCalculate(
+    basket: Basket,
+    callOpts?: CallOptions,
+  ): Promise<GiftCertificateCalculationResult> {
+    const data = await this.client.post<GiftCertificateCalculateResponse>(
+      'Json/General/GiftCertificateCalculate',
+      { Criteria: { Basket: basket } },
+      callOpts ?? {},
+    );
+    const result =
+      data.giftCertificateCalculateResult ??
+      data.GiftCertificateCalculateResult ??
+      data.result ??
+      data.Result;
+    if (!result) throw new Error('GiftCertificateCalculate: no result in response');
+    return {
+      ...result,
+      discounts: result.discounts ?? [],
+    };
+  }
+
+  /** Validate voucher codes and return voucher states / linked coupon details. */
+  async voucherValidate(
+    voucherCodes: string[],
+    callOpts?: CallOptions,
+  ): Promise<VoucherValidateResult> {
+    const data = await this.client.post<VoucherValidateResponse>(
+      'Json/General/VoucherValidate',
+      { Criteria: { VoucherCodes: voucherCodes } },
+      callOpts ?? {},
+    );
+    const result =
+      data.voucherValidateResult ??
+      data.VoucherValidateResult ??
+      data.result ??
+      data.Result;
+    if (!result) throw new Error('VoucherValidate: no result in response');
+    return {
+      ...result,
+      voucherStates: result.voucherStates ?? [],
+      couponDetails: result.couponDetails ?? [],
+    };
+  }
+
   // ---- Basket flow -------------------------------------------------------
 
   /** Recalculate prices, discounts, VAT for a basket without committing. */
@@ -342,4 +494,11 @@ export class GeneralModule {
       callOpts ?? {},
     );
   }
+}
+
+function normalizeCouponResult<T extends CouponCalculationResult>(result: T): T {
+  return {
+    ...result,
+    discounts: result.discounts ?? [],
+  };
 }

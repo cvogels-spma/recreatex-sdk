@@ -357,6 +357,83 @@ describe('GeneralModule', () => {
     expect(body?.Criteria?.Id).toBe('gc-1');
     expect(calls[0]?.url).toMatch(/Json\/General\/SetGiftCertificatePrinted\/$/);
   });
+
+  it('couponCalculate sends a basket inside Criteria', async () => {
+    const { fetch, calls } = fetchSpy({
+      couponCalculateResult: { status: 1, discounts: [] },
+    });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const result = await rx.general.couponCalculate({
+      CustomerId: 'cust',
+      Items: [],
+      CouponCodes: ['OPENING10'],
+    });
+    expect(result.status).toBe(1);
+    const body = calls[0]?.body as { Criteria?: { Basket?: { CouponCodes?: string[] } } } | null;
+    expect(body?.Criteria?.Basket?.CouponCodes).toEqual(['OPENING10']);
+    expect(calls[0]?.url).toMatch(/Json\/General\/CouponCalculate\/$/);
+  });
+
+  it('couponReserve and couponRelease read result envelopes', async () => {
+    let call = 0;
+    const fetch = vi.fn(async () => {
+      call += 1;
+      return new Response(
+        JSON.stringify(
+          call === 1
+            ? { couponReserveResult: { status: 0, discounts: [], couponReservations: ['res-1'] } }
+            : { couponReleaseResult: { isSuccess: true, message: null } },
+        ),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const reserved = await rx.general.couponReserve({ CustomerId: 'cust', Items: [] });
+    const released = await rx.general.couponRelease();
+    expect(reserved.couponReservations).toEqual(['res-1']);
+    expect(released.isSuccess).toBe(true);
+  });
+
+  it('voucherValidate sends voucher codes and normalizes arrays', async () => {
+    const { fetch, calls } = fetchSpy({
+      voucherValidateResult: {
+        voucherStates: [{ voucherCode: 'ABC', status: 1 }],
+        couponDetails: [],
+      },
+    });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const result = await rx.general.voucherValidate(['ABC']);
+    expect(result.voucherStates[0]?.voucherCode).toBe('ABC');
+    const body = calls[0]?.body as { Criteria?: { VoucherCodes?: string[] } } | null;
+    expect(body?.Criteria?.VoucherCodes).toEqual(['ABC']);
+  });
+});
+
+describe('DocumentsModule', () => {
+  it('downloads organised visit PDFs via the document service', async () => {
+    const calls: string[] = [];
+    const fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
+      calls.push(u);
+      return new Response('pdf-bytes', { status: 200, headers: { 'content-type': 'application/pdf' } });
+    }) as unknown as typeof fetch;
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const blob = await rx.documents.organisedVisitPdf({ organisedVisitId: 'visit-1' });
+    expect(blob.size).toBeGreaterThan(0);
+    expect(calls[0]).toMatch(/WebShopDocumentService\.svc\/OrganisedVisits\/shop-id\/de\/visit-1$/);
+  });
+
+  it('downloads organised visit help from the document service', async () => {
+    const calls: string[] = [];
+    const fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
+      calls.push(u);
+      return new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+    }) as unknown as typeof fetch;
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    await rx.documents.organisedVisitHelp('de');
+    expect(calls[0]).toMatch(/WebShopDocumentService\.svc\/Help\/OrganisedVisits\/shop-id\/de$/);
+  });
 });
 
 describe('ManagerModule', () => {

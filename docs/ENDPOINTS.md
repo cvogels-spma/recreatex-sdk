@@ -31,6 +31,11 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `general` | `listPaymentMethods()` | `/Json/General/ListPaymentMethods/` | 32 payment methods |
 | `general` | `findPerson(criteria)` | `/Json/General/FindPerson/` | Person lookup |
 | `general` | `findSales(criteria)` | `/Json/General/FindSales/` | Low-level transactions |
+| `general` | `couponCalculate(basket)` | `/Json/General/CouponCalculate/` | Validate/calculate coupon discounts |
+| `general` | `couponReserve(basket)` | `/Json/General/CouponReserve/` | Reserve coupon discounts for checkout |
+| `general` | `couponRelease()` | `/Json/General/CouponRelease/` | Release coupon reservations for the session |
+| `general` | `giftCertificateCalculate(basket)` | `/Json/General/GiftCertificateCalculate/` | Calculate gift-certificate discounts |
+| `general` | `voucherValidate(codes)` | `/Json/General/VoucherValidate/` | Validate voucher codes |
 | `general` | `reCalculateBasket(basket)` | `/Json/General/ReCalculateBasket/` | Basket totals |
 | `general` | `lockBasketItems(items)` | `/Json/General/LockBasketItems/` | Reserve items for payment |
 | `general` | `checkoutBasket(basket)` | `/Json/General/CheckoutBasket/` | Finalise sale |
@@ -40,6 +45,8 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `manager` | `listVisitingCustomersInformation(criteria)` | `/Json/ManagerApp/ListVisitingCustomersInformation/` | Visitor scans |
 | `documents` | `giftCertificatePdf({ salesLineId })` | `/WebShopDocumentService.svc/GiftCertificates/{ShopId}/{lang}/{SalesLineId}` | Voucher PDF |
 | `documents` | `giftCertificateHelp(lang)` | `/WebShopDocumentService.svc/Help/GiftCertificates/{ShopId}/{lang}` | Template merge-fields |
+| `documents` | `organisedVisitPdf({ organisedVisitId })` | `/WebShopDocumentService.svc/OrganisedVisits/{ShopId}/{lang}/{OrganisedVisitId}` | Historical booking PDF |
+| `documents` | `organisedVisitHelp(lang)` | `/WebShopDocumentService.svc/Help/OrganisedVisits/{ShopId}/{lang}` | Booking template merge-fields |
 
 ## Date formats
 
@@ -80,6 +87,12 @@ const rows = catalog.flatMap((group) =>
 console.table(rows);
 ```
 
+Use `syncGastroSales(rx, { fromYmd, untilYmd })` for robust article-level
+gastro sales over longer windows. It pulls `FindArticleSalesOrders` day by
+day and maps sales lines onto the known gastro catalogue without
+double-counting ambiguous description-only matches. Non-gastro/unmatched
+sales lines stay quiet unless `includeUnmatchedIssues: true` is set.
+
 Use `articles.getArticleSalesReport()` for the common “Hamburger dossier”
 case:
 
@@ -102,6 +115,28 @@ article history endpoint; if the JSON response includes article ids/codes the
 SDK matches on those, otherwise it falls back to the sales-line description.
 The live endpoint expects numeric `Type` enum values; the SDK accepts friendly
 strings like `'Sales'` and translates them before sending.
+
+## Discounts
+
+Coupon/voucher endpoints support validation and checkout reservation, not a
+public "list all historic/future discount codes" query. Known codes can be
+checked with:
+
+```ts
+const coupon = await rx.general.couponCalculate({
+  CustomerId: GUEST_CUSTOMER_ID,
+  Items: [],
+  CouponCodes: ['OPENING10'],
+});
+const voucher = await rx.general.voucherValidate(['OPENING10']);
+```
+
+## Booking Documents
+
+Historical OrganisedVisits can be retrieved by id/order number and converted
+to invoice-ready data via `getBookingInvoiceDraft()` from
+`recreatex-sdk/spacemagic`. If an OrganisedVisit PDF template is configured in
+Recreatex, download it with `rx.documents.organisedVisitPdf({ organisedVisitId })`.
 
 ## Response shape conventions
 

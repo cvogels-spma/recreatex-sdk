@@ -4,13 +4,14 @@
  * The host AND path differ from the JSON API:
  *
  *   `${baseUrl}/WebShopDocumentService.svc/GiftCertificates/{ShopId}/{lang}/{SalesLineId}`
+ *   `${baseUrl}/WebShopDocumentService.svc/OrganisedVisits/{ShopId}/{lang}/{OrganisedVisitId}`
  *
  * Note the capital `WebShop` and the `.svc` suffix. These are GET requests,
  * unlike everything else in the SDK.
  */
 
 import type { ReCreateXClient, CallOptions } from '../client.js';
-import type { GiftCertificatePdfRequest } from '../types/documents.js';
+import type { GiftCertificatePdfRequest, OrganisedVisitPdfRequest } from '../types/documents.js';
 
 export class DocumentsModule {
   constructor(private readonly client: ReCreateXClient) {}
@@ -51,6 +52,28 @@ export class DocumentsModule {
     const lang = language ?? this.client.options.language ?? 'de';
     const shopId = this.client.options.shopId;
     const url = `${this.base}/Help/GiftCertificates/${shopId}/${lang}`;
+    return this.client.getBinary(url, callOpts ?? {});
+  }
+
+  /** Download the configured OrganisedVisit PDF for a historical booking. */
+  async organisedVisitPdf(
+    req: OrganisedVisitPdfRequest,
+    callOpts?: CallOptions,
+  ): Promise<Blob> {
+    const lang = req.language ?? this.client.options.language ?? 'de';
+    const shopId = req.shopId ?? this.client.options.shopId;
+    const url = `${this.base}/OrganisedVisits/${shopId}/${lang}/${req.organisedVisitId}`;
+    return this.client.getBinary(url, callOpts ?? {});
+  }
+
+  /** Discover merge-fields supported by the configured OrganisedVisit template. */
+  async organisedVisitHelp(
+    language?: 'de' | 'en' | 'nl' | 'fr',
+    callOpts?: CallOptions,
+  ): Promise<Blob> {
+    const lang = language ?? this.client.options.language ?? 'de';
+    const shopId = this.client.options.shopId;
+    const url = `${this.base}/Help/OrganisedVisits/${shopId}/${lang}`;
     return this.client.getBinary(url, callOpts ?? {});
   }
 }

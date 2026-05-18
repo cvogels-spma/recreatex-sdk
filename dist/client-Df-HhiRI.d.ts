@@ -496,6 +496,8 @@ interface OrganisedVisitSaleInfo {
     id: string;
     salesNo: number;
     salesDate: RecreatexDateTime;
+    invoiceNumber?: number;
+    invoiceDate?: RecreatexDateTime;
     guest?: OrganisedVisitSaleGuest;
 }
 interface OrganisedVisit {
@@ -514,6 +516,9 @@ interface OrganisedVisit {
     person?: OrganisedVisitPerson;
     orderNumber?: string;
     purchaseDate?: RecreatexDateTime;
+    salesNo?: number;
+    coupon?: string | null;
+    couponDiscount?: number;
     periodReservations?: OrganisedVisitPeriodReservation[];
     articles?: OrganisedVisitArticle[];
     salesInfos?: OrganisedVisitSaleInfo[];
@@ -660,169 +665,6 @@ declare class ExpositionsModule {
     getRebookingCosts(input: GetRebookingCostsInput, callOpts?: CallOptions): Promise<{
         rebookingCosts: number;
     }>;
-}
-
-/**
- * General namespace — access zones, readers, divisions, persons, sales,
- * payment methods, point-of-sales, basket primitives.
- */
-
-interface AccessZoneOccupancy {
-    maxVisitors: number;
-    maxVisitorsPerDay: number;
-    /** Daily count — IGNORES OccupancyFrom/Until and always reflects "today". */
-    visitorsToday: number;
-    /** Currently inside the zone. */
-    visitorsCurrent: number;
-}
-interface AccessZoneReader {
-    id: string;
-    code?: string;
-    name?: string;
-    /** 0 = entrance, 1 = exit. */
-    type?: 0 | 1;
-}
-interface AccessZone {
-    id: string;
-    code: string;
-    name: string;
-    number: number;
-    occupancy?: AccessZoneOccupancy;
-    entranceReaders?: AccessZoneReader[];
-    exitReaders?: AccessZoneReader[];
-}
-interface FindAccessZonesCriteria {
-    id?: string | null;
-    /** Recreatex datetime window. SDK's `today: true` shortcut sets this for today (Berlin). */
-    occupancyFrom?: RecreatexDateTime;
-    occupancyUntil?: RecreatexDateTime;
-    includes?: {
-        entranceReaders?: boolean;
-        exitReaders?: boolean;
-        occupancy?: boolean;
-        inactiveZoneControl?: boolean;
-    };
-}
-interface Reader {
-    id: string;
-    code?: string;
-    name?: string;
-    number?: number;
-    type?: number;
-    [extra: string]: unknown;
-}
-interface Division {
-    id: string;
-    code?: string;
-    name?: string;
-    address?: string;
-    [extra: string]: unknown;
-}
-interface PointOfSale {
-    id: string;
-    code?: string;
-    name?: string;
-    [extra: string]: unknown;
-}
-interface PaymentMethod {
-    id: string;
-    code: string;
-    name: string;
-    /** Often a number: 0 = card, 1 = cash, etc. */
-    type?: number;
-    [extra: string]: unknown;
-}
-interface PersonCredential {
-    username?: string;
-    password?: string;
-}
-interface PersonAddress {
-    street?: string;
-    number?: string;
-    zipCode?: string;
-    town?: string;
-    countryDescription?: string;
-    telephone?: string;
-}
-interface Person {
-    id: string;
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    cellPhone?: string;
-    language?: string;
-    credential?: PersonCredential;
-    address?: PersonAddress;
-    birthDate?: string;
-    [extra: string]: unknown;
-}
-interface FindPersonCriteria {
-    id?: string;
-    email?: string;
-    firstName?: string;
-    lastName?: string;
-    username?: string;
-}
-interface SaleLine {
-    articleId?: string;
-    description?: string;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-    [extra: string]: unknown;
-}
-interface SalePaymentLine {
-    paymentMethodId: string;
-    amount: number;
-    [extra: string]: unknown;
-}
-interface Sale {
-    id: string;
-    saleDate: RecreatexDateTime;
-    pointOfSaleId?: string;
-    customerId?: string | null;
-    totalAmount: number;
-    lines?: SaleLine[];
-    paymentLines?: SalePaymentLine[];
-    [extra: string]: unknown;
-}
-interface FindSalesCriteria {
-    from: RecreatexDateTime;
-    until: RecreatexDateTime;
-    pointOfSaleId?: string;
-    divisionId?: string;
-}
-/**
- * A single gift-certificate record as returned by `FindGiftCertificates`.
- *
- * Heads-up: `number` is typically null for a freshly-created certificate
- * (the PersonCard isn't populated yet). The visible voucher code lives in
- * the DocumentService PDF — use this record only to discover the
- * GiftCertificate `id` (for `SetGiftCertificatePrinted`) or to match a
- * cert via `salesSeriesID` to a CheckoutBasket result.
- */
-interface GiftCertificate {
-    id: string;
-    number: string | null;
-    amount: number | null;
-    purchaseDate: string | null;
-    salesSeriesID: string | null;
-    shortName: string | null;
-    description: string | null;
-    ticketDescription: string | null;
-    extraDescription: string | null;
-    validFrom: string | null;
-    validTill: string | null;
-    /** ISO timestamp once SetGiftCertificatePrinted has fired; otherwise null. */
-    printDate: string | null;
-}
-interface FindGiftCertificatesCriteria {
-    /** Recreatex Person GUID — typically the customer who placed the order. */
-    customerId?: string;
-    id?: string;
-    number?: string;
-    pageIndex?: number;
-    pageSize?: number;
 }
 
 /**
@@ -1037,6 +879,215 @@ interface CheckoutResponse {
 }
 
 /**
+ * General namespace — access zones, readers, divisions, persons, sales,
+ * payment methods, point-of-sales, basket primitives.
+ */
+
+interface AccessZoneOccupancy {
+    maxVisitors: number;
+    maxVisitorsPerDay: number;
+    /** Daily count — IGNORES OccupancyFrom/Until and always reflects "today". */
+    visitorsToday: number;
+    /** Currently inside the zone. */
+    visitorsCurrent: number;
+}
+interface AccessZoneReader {
+    id: string;
+    code?: string;
+    name?: string;
+    /** 0 = entrance, 1 = exit. */
+    type?: 0 | 1;
+}
+interface AccessZone {
+    id: string;
+    code: string;
+    name: string;
+    number: number;
+    occupancy?: AccessZoneOccupancy;
+    entranceReaders?: AccessZoneReader[];
+    exitReaders?: AccessZoneReader[];
+}
+interface FindAccessZonesCriteria {
+    id?: string | null;
+    /** Recreatex datetime window. SDK's `today: true` shortcut sets this for today (Berlin). */
+    occupancyFrom?: RecreatexDateTime;
+    occupancyUntil?: RecreatexDateTime;
+    includes?: {
+        entranceReaders?: boolean;
+        exitReaders?: boolean;
+        occupancy?: boolean;
+        inactiveZoneControl?: boolean;
+    };
+}
+interface Reader {
+    id: string;
+    code?: string;
+    name?: string;
+    number?: number;
+    type?: number;
+    [extra: string]: unknown;
+}
+interface Division {
+    id: string;
+    code?: string;
+    name?: string;
+    address?: string;
+    [extra: string]: unknown;
+}
+interface PointOfSale {
+    id: string;
+    code?: string;
+    name?: string;
+    [extra: string]: unknown;
+}
+interface PaymentMethod {
+    id: string;
+    code: string;
+    name: string;
+    /** Often a number: 0 = card, 1 = cash, etc. */
+    type?: number;
+    [extra: string]: unknown;
+}
+interface PersonCredential {
+    username?: string;
+    password?: string;
+}
+interface PersonAddress {
+    street?: string;
+    number?: string;
+    zipCode?: string;
+    town?: string;
+    countryDescription?: string;
+    telephone?: string;
+}
+interface Person {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    cellPhone?: string;
+    language?: string;
+    credential?: PersonCredential;
+    address?: PersonAddress;
+    birthDate?: string;
+    [extra: string]: unknown;
+}
+interface FindPersonCriteria {
+    id?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    username?: string;
+}
+interface SaleLine {
+    articleId?: string;
+    description?: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    [extra: string]: unknown;
+}
+interface SalePaymentLine {
+    paymentMethodId: string;
+    amount: number;
+    [extra: string]: unknown;
+}
+interface Sale {
+    id: string;
+    saleDate: RecreatexDateTime;
+    pointOfSaleId?: string;
+    customerId?: string | null;
+    totalAmount: number;
+    lines?: SaleLine[];
+    paymentLines?: SalePaymentLine[];
+    [extra: string]: unknown;
+}
+interface FindSalesCriteria {
+    from: RecreatexDateTime;
+    until: RecreatexDateTime;
+    pointOfSaleId?: string;
+    divisionId?: string;
+}
+type CouponStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | number;
+interface CouponDiscount {
+    discountAmount?: number;
+    couponID?: string;
+    couponId?: string;
+    couponCode?: string;
+    couponDescription?: string;
+    [extra: string]: unknown;
+}
+interface CouponCalculationResult {
+    status: CouponStatus;
+    discounts: CouponDiscount[];
+    [extra: string]: unknown;
+}
+interface CouponReservationResult extends CouponCalculationResult {
+    couponReservations: string[];
+}
+interface CouponReleaseResult {
+    isSuccess: boolean;
+    message?: string | null;
+}
+type GiftCertificateStatus = 0 | 1 | 2 | number;
+interface GiftCertificateDiscount {
+    number?: string;
+    divisionCardID?: string;
+    remainingAmount?: number;
+    [extra: string]: unknown;
+}
+interface GiftCertificateCalculationResult {
+    status: GiftCertificateStatus;
+    discounts: GiftCertificateDiscount[];
+    [extra: string]: unknown;
+}
+interface VoucherState {
+    voucherCode: string;
+    status: CouponStatus | number;
+    [extra: string]: unknown;
+}
+interface VoucherValidateResult {
+    voucherStates: VoucherState[];
+    couponDetails: unknown[];
+    [extra: string]: unknown;
+}
+interface DiscountBasketCriteria {
+    basket: Basket;
+}
+/**
+ * A single gift-certificate record as returned by `FindGiftCertificates`.
+ *
+ * Heads-up: `number` is typically null for a freshly-created certificate
+ * (the PersonCard isn't populated yet). The visible voucher code lives in
+ * the DocumentService PDF — use this record only to discover the
+ * GiftCertificate `id` (for `SetGiftCertificatePrinted`) or to match a
+ * cert via `salesSeriesID` to a CheckoutBasket result.
+ */
+interface GiftCertificate {
+    id: string;
+    number: string | null;
+    amount: number | null;
+    purchaseDate: string | null;
+    salesSeriesID: string | null;
+    shortName: string | null;
+    description: string | null;
+    ticketDescription: string | null;
+    extraDescription: string | null;
+    validFrom: string | null;
+    validTill: string | null;
+    /** ISO timestamp once SetGiftCertificatePrinted has fired; otherwise null. */
+    printDate: string | null;
+}
+interface FindGiftCertificatesCriteria {
+    /** Recreatex Person GUID — typically the customer who placed the order. */
+    customerId?: string;
+    id?: string;
+    number?: string;
+    pageIndex?: number;
+    pageSize?: number;
+}
+
+/**
  * General namespace.
  *
  * Endpoints:
@@ -1047,6 +1098,10 @@ interface CheckoutResponse {
  *  - `General/ListPaymentMethods`  → 32 payment methods
  *  - `General/FindPerson`          → look up person records
  *  - `General/FindSales`           → low-level transactions
+ *  - `General/CouponCalculate`     → validate/calculate discount codes
+ *  - `General/CouponReserve`       → reserve discount codes for checkout
+ *  - `General/CouponRelease`       → release reserved discount codes
+ *  - `General/VoucherValidate`     → validate voucher codes
  *  - `General/ReCalculateBasket`   → totals/discounts (web shop flow)
  *  - `General/LockBasketItems`     → reserve items (web shop flow)
  *  - `General/CheckoutBasket`      → finalise + create sale (web shop flow)
@@ -1080,6 +1135,16 @@ declare class GeneralModule {
     findPerson(criteria: FindPersonCriteria, callOpts?: CallOptions): Promise<Person[]>;
     /** Low-level sales (only Nachzahlautomat / Checkins, not all POS). */
     findSales(criteria: FindSalesCriteria, callOpts?: CallOptions): Promise<Sale[]>;
+    /** Validate and calculate coupon-code discounts for the current basket. */
+    couponCalculate(basket: Basket, callOpts?: CallOptions): Promise<CouponCalculationResult>;
+    /** Reserve coupon-code discounts for checkout; release with {@link couponRelease}. */
+    couponReserve(basket: Basket, callOpts?: CallOptions): Promise<CouponReservationResult>;
+    /** Release coupon reservations tied to the current session id. */
+    couponRelease(callOpts?: CallOptions): Promise<CouponReleaseResult>;
+    /** Calculate gift-certificate discounts for the current basket. */
+    giftCertificateCalculate(basket: Basket, callOpts?: CallOptions): Promise<GiftCertificateCalculationResult>;
+    /** Validate voucher codes and return voucher states / linked coupon details. */
+    voucherValidate(voucherCodes: string[], callOpts?: CallOptions): Promise<VoucherValidateResult>;
     /** Recalculate prices, discounts, VAT for a basket without committing. */
     reCalculateBasket(basket: Basket, callOpts?: CallOptions): Promise<Basket>;
     /** Lock basket items for the duration of payment. */
@@ -1214,6 +1279,14 @@ interface GiftCertificatePdfRequest {
     /** Override the shop ID (else taken from the client config). */
     shopId?: string;
 }
+interface OrganisedVisitPdfRequest {
+    /** OrganisedVisit GUID from `FindOrganisedVisits`. */
+    organisedVisitId: string;
+    /** ISO language code; the Space Magic template only ships `de`. */
+    language?: 'de' | 'en' | 'nl' | 'fr';
+    /** Override the shop ID (else taken from the client config). */
+    shopId?: string;
+}
 
 /**
  * WebShopDocumentService.svc — binary downloads (PDFs).
@@ -1221,6 +1294,7 @@ interface GiftCertificatePdfRequest {
  * The host AND path differ from the JSON API:
  *
  *   `${baseUrl}/WebShopDocumentService.svc/GiftCertificates/{ShopId}/{lang}/{SalesLineId}`
+ *   `${baseUrl}/WebShopDocumentService.svc/OrganisedVisits/{ShopId}/{lang}/{OrganisedVisitId}`
  *
  * Note the capital `WebShop` and the `.svc` suffix. These are GET requests,
  * unlike everything else in the SDK.
@@ -1247,6 +1321,10 @@ declare class DocumentsModule {
     giftCertificatePdf(req: GiftCertificatePdfRequest, callOpts?: CallOptions): Promise<Blob>;
     /** Discover the merge-fields supported by the configured Word template. */
     giftCertificateHelp(language?: 'de' | 'en' | 'nl' | 'fr', callOpts?: CallOptions): Promise<Blob>;
+    /** Download the configured OrganisedVisit PDF for a historical booking. */
+    organisedVisitPdf(req: OrganisedVisitPdfRequest, callOpts?: CallOptions): Promise<Blob>;
+    /** Discover merge-fields supported by the configured OrganisedVisit template. */
+    organisedVisitHelp(language?: 'de' | 'en' | 'nl' | 'fr', callOpts?: CallOptions): Promise<Blob>;
 }
 
 /**
@@ -1327,4 +1405,4 @@ declare class ReCreateXClient {
     getBinary(url: string, callOpts?: CallOptions): Promise<Blob>;
 }
 
-export { type FindPersonCriteria as $, type AccessZone as A, type Basket as B, type CallOptions as C, type CancelOrganisedVisitInput as D, type CancelOrganisedVisitResult as E, type CheckoutResponse as F, type CheckoutResult as G, type Division as H, DocumentsModule as I, type Exposition as J, type ExpositionDayOverview as K, type ExpositionPeriod as L, type ExpositionPeriodDate as M, type ExpositionPeriodPrice as N, type ExpositionPeriodRef as O, type ExpositionPeriodReservationEntry as P, type ExpositionPeriodReservationItem as Q, type RecreatexContext as R, ExpositionsModule as S, type FetchLike as T, type FindAccessZonesCriteria as U, type FindArticleSalesOrdersCriteria as V, type FindArticlesCriteria as W, type FindExpositionsCriteria as X, type Ymd as Y, type FindGiftCertificatesCriteria as Z, type FindOrganisedVisitsCriteria as _, type RecreatexDateTime as a, type FindSalesCriteria as a0, GeneralModule as a1, type GetRebookingCostsInput as a2, type GiftCertificate as a3, type GiftCertificatePdfRequest as a4, ManagerModule as a5, type OrganisedVisit as a6, type OrganisedVisitArticle as a7, type OrganisedVisitPeriodReservation as a8, type OrganisedVisitPeriodTransfer as a9, isRetryableError as aA, paginate as aB, paginateIter as aC, withRetry as aD, type OrganisedVisitPerson as aa, type OrganisedVisitPersonAddress as ab, type OrganisedVisitRebookingItem as ac, type OrganisedVisitSaleAdjustment as ad, type OrganisedVisitSaleGuest as ae, type OrganisedVisitSaleInfo as af, type OrganisedVisitTicketAdjustment as ag, type PaginateOptions as ah, type Paging as ai, type PaymentMethod as aj, type Person as ak, type PersonAddress as al, type PersonCredential as am, type PointOfSale as an, ReCreateXClient as ao, type ReCreateXClientOptions as ap, type Reader as aq, type RecreatexEnvelope as ar, type RetryOptions as as, type Sale as at, type SaleLine as au, type SalePaymentLine as av, type SalesInformationCriteria as aw, type SalesInformationEntry as ax, type VisitingCustomersCriteria as ay, type VisitingCustomersEntry as az, type AccessZoneOccupancy as b, type AccessZoneReader as c, type AdjustOrganisedVisitInput as d, type AnonymousPerson as e, type Article as f, type ArticleGroup as g, type ArticleGroupRef as h, type ArticlePriceInformation as i, type ArticlePriceInformationCriteria as j, type ArticleSaleItem as k, type ArticleSalesHistoryBucket as l, type ArticleSalesHistoryGroup as m, type ArticleSalesMatchMode as n, type ArticleSalesOrder as o, type ArticleSalesOrderType as p, type ArticleSalesReport as q, type ArticleSalesReportCriteria as r, type ArticleSalesReportLine as s, type ArticleVat as t, ArticlesModule as u, type BasketItem as v, type BasketPayment as w, type BasketTypeString as x, BasketTypeStrings as y, type BasketValidationResult as z };
+export { type FindAccessZonesCriteria as $, type AccessZone as A, type Basket as B, type CallOptions as C, type CancelOrganisedVisitInput as D, type CancelOrganisedVisitResult as E, type CheckoutResponse as F, type CheckoutResult as G, type CouponCalculationResult as H, type CouponDiscount as I, type CouponReleaseResult as J, type CouponReservationResult as K, type CouponStatus as L, type DiscountBasketCriteria as M, type Division as N, DocumentsModule as O, type Exposition as P, type ExpositionDayOverview as Q, type RecreatexContext as R, type ExpositionPeriod as S, type ExpositionPeriodDate as T, type ExpositionPeriodPrice as U, type ExpositionPeriodRef as V, type ExpositionPeriodReservationEntry as W, type ExpositionPeriodReservationItem as X, type Ymd as Y, ExpositionsModule as Z, type FetchLike as _, type RecreatexDateTime as a, type FindArticleSalesOrdersCriteria as a0, type FindArticlesCriteria as a1, type FindExpositionsCriteria as a2, type FindGiftCertificatesCriteria as a3, type FindOrganisedVisitsCriteria as a4, type FindPersonCriteria as a5, type FindSalesCriteria as a6, GeneralModule as a7, type GetRebookingCostsInput as a8, type GiftCertificate as a9, type Reader as aA, type RecreatexEnvelope as aB, type RetryOptions as aC, type Sale as aD, type SaleLine as aE, type SalePaymentLine as aF, type SalesInformationCriteria as aG, type SalesInformationEntry as aH, type VisitingCustomersCriteria as aI, type VisitingCustomersEntry as aJ, type VoucherState as aK, type VoucherValidateResult as aL, isRetryableError as aM, paginate as aN, paginateIter as aO, withRetry as aP, type GiftCertificateCalculationResult as aa, type GiftCertificateDiscount as ab, type GiftCertificatePdfRequest as ac, type GiftCertificateStatus as ad, ManagerModule as ae, type OrganisedVisit as af, type OrganisedVisitArticle as ag, type OrganisedVisitPdfRequest as ah, type OrganisedVisitPeriodReservation as ai, type OrganisedVisitPeriodTransfer as aj, type OrganisedVisitPerson as ak, type OrganisedVisitPersonAddress as al, type OrganisedVisitRebookingItem as am, type OrganisedVisitSaleAdjustment as an, type OrganisedVisitSaleGuest as ao, type OrganisedVisitSaleInfo as ap, type OrganisedVisitTicketAdjustment as aq, type PaginateOptions as ar, type Paging as as, type PaymentMethod as at, type Person as au, type PersonAddress as av, type PersonCredential as aw, type PointOfSale as ax, ReCreateXClient as ay, type ReCreateXClientOptions as az, type AccessZoneOccupancy as b, type AccessZoneReader as c, type AdjustOrganisedVisitInput as d, type AnonymousPerson as e, type Article as f, type ArticleGroup as g, type ArticleGroupRef as h, type ArticlePriceInformation as i, type ArticlePriceInformationCriteria as j, type ArticleSaleItem as k, type ArticleSalesHistoryBucket as l, type ArticleSalesHistoryGroup as m, type ArticleSalesMatchMode as n, type ArticleSalesOrder as o, type ArticleSalesOrderType as p, type ArticleSalesReport as q, type ArticleSalesReportCriteria as r, type ArticleSalesReportLine as s, type ArticleVat as t, ArticlesModule as u, type BasketItem as v, type BasketPayment as w, type BasketTypeString as x, BasketTypeStrings as y, type BasketValidationResult as z };

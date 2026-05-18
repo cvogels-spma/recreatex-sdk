@@ -100,6 +100,54 @@ async function listGastroArticles(client, options = {}, callOpts) {
     articles: group.articles.sort(compareGastroArticles)
   })).filter((group) => options.includeEmptyGroups || group.articles.length > 0);
 }
+async function syncGastroSales(client, options, callOpts) {
+  const catalog = await listGastroArticles(client, options, callOpts);
+  const articles = catalog.flatMap((group) => group.articles).filter((article) => !options.articleIds || options.articleIds.includes(article.id)).filter((article) => !options.articleCodes || options.articleCodes.includes(article.code));
+  const byId = new Map(articles.map((article) => [normalize(article.id), article]));
+  const byCode = new Map(articles.map((article) => [normalize(article.code), article]));
+  const byName = /* @__PURE__ */ new Map();
+  for (const article of articles) {
+    const key = normalize(article.name);
+    byName.set(key, [...byName.get(key) ?? [], article]);
+  }
+  const buckets = /* @__PURE__ */ new Map();
+  const issues = [];
+  for (const date of eachYmd(options.fromYmd, options.untilYmd)) {
+    const sales = await client.articles.findArticleSalesOrders(
+      {
+        from: `${date} 00:00:00.000`,
+        until: `${date} 23:59:59.000`,
+        type: "Sales",
+        pageSize: options.pageSize ?? 200
+      },
+      { pageSize: options.pageSize ?? 200, maxPages: options.maxPagesPerDay ?? 100 },
+      callOpts
+    );
+    for (const line of sales) {
+      const matches = matchGastroSalesLine(line, byId, byCode, byName);
+      if (matches.length === 0) {
+        if (options.includeUnmatchedIssues) issues.push(toSalesIssue(date, line, "unmatched"));
+        continue;
+      }
+      if (matches.length > 1 && !options.includeAmbiguousDescriptionMatches) {
+        issues.push(toSalesIssue(date, line, "ambiguous-description", matches));
+        continue;
+      }
+      for (const article of matches) addSalesLineToBucket(buckets, date, article, line);
+    }
+  }
+  const rows = [...buckets.values()].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.groupName.localeCompare(b.groupName, "de-DE") || a.name.localeCompare(b.name, "de-DE")
+  );
+  return {
+    fromYmd: options.fromYmd,
+    untilYmd: options.untilYmd,
+    articleCount: articles.length,
+    rows,
+    totals: summarizeRows(rows),
+    issues
+  };
+}
 function toGastroCatalogItem(article, groupId, groupName) {
   return {
     groupId,
@@ -115,6 +163,107 @@ function toGastroCatalogItem(article, groupId, groupName) {
 }
 function compareGastroArticles(a, b) {
   return a.name.localeCompare(b.name, "de-DE") || a.code.localeCompare(b.code, "de-DE");
+}
+function matchGastroSalesLine(line, byId, byCode, byName) {
+  const raw = line;
+  const articleId = readString(raw, "articleId", "ArticleId", "ArticleID") ?? readNestedString(raw, ["article", "Article"], ["id", "Id", "ID"]);
+  if (articleId) {
+    const match = byId.get(normalize(articleId));
+    if (match) return [match];
+  }
+  const code = readString(raw, "articleCode", "code", "Code") ?? readNestedString(raw, ["article", "Article"], ["code", "Code"]);
+  if (code) {
+    const match = byCode.get(normalize(code));
+    if (match) return [match];
+  }
+  const description = readString(raw, "description", "Description", "articleName", "name", "Name") ?? readNestedString(raw, ["article", "Article"], ["name", "Name"]);
+  return byName.get(normalize(description)) ?? [];
+}
+function addSalesLineToBucket(buckets, date, article, line) {
+  const key = `${date}|${article.id}`;
+  const existing = buckets.get(key) ?? {
+    date,
+    groupId: article.groupId,
+    groupName: article.groupName,
+    articleId: article.id,
+    code: article.code,
+    name: article.name,
+    cataloguePrice: article.price,
+    quantity: 0,
+    totalPrice: 0,
+    lineCount: 0,
+    averageUnitPrice: null
+  };
+  const quantity = readSalesNumber(line, "quantity", "Quantity") ?? 0;
+  const totalPrice = readSalesNumber(line, "totalPrice", "TotalPrice") ?? round2(quantity * (readSalesNumber(line, "unitPrice", "UnitPrice") ?? 0));
+  existing.quantity = round2(existing.quantity + quantity);
+  existing.totalPrice = round2(existing.totalPrice + totalPrice);
+  existing.lineCount += 1;
+  existing.averageUnitPrice = existing.quantity > 0 ? round2(existing.totalPrice / existing.quantity) : null;
+  buckets.set(key, existing);
+}
+function summarizeRows(rows) {
+  const quantity = round2(rows.reduce((sum2, row) => sum2 + row.quantity, 0));
+  const totalPrice = round2(rows.reduce((sum2, row) => sum2 + row.totalPrice, 0));
+  const lineCount = rows.reduce((sum2, row) => sum2 + row.lineCount, 0);
+  return {
+    quantity,
+    totalPrice,
+    lineCount,
+    averageUnitPrice: quantity > 0 ? round2(totalPrice / quantity) : null
+  };
+}
+function toSalesIssue(date, line, reason, candidates = []) {
+  const raw = line;
+  return {
+    date,
+    description: readString(raw, "description", "Description") ?? "",
+    quantity: readSalesNumber(line, "quantity", "Quantity") ?? 0,
+    totalPrice: readSalesNumber(line, "totalPrice", "TotalPrice") ?? 0,
+    reason,
+    ...candidates.length > 0 && { candidateArticleIds: candidates.map((article) => article.id) }
+  };
+}
+function eachYmd(fromYmd, untilYmd) {
+  const out = [];
+  const cursor = /* @__PURE__ */ new Date(`${fromYmd}T00:00:00.000Z`);
+  const end = /* @__PURE__ */ new Date(`${untilYmd}T00:00:00.000Z`);
+  while (cursor <= end) {
+    out.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
+}
+function normalize(v) {
+  return (v ?? "").trim().toLocaleLowerCase("de-DE");
+}
+function readString(obj, ...keys) {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string") return value;
+  }
+  return void 0;
+}
+function readNestedString(obj, objectKeys, valueKeys) {
+  for (const objectKey of objectKeys) {
+    const value = obj[objectKey];
+    if (value && typeof value === "object") {
+      const found = readString(value, ...valueKeys);
+      if (found) return found;
+    }
+  }
+  return void 0;
+}
+function readSalesNumber(line, ...keys) {
+  const raw = line;
+  for (const key of keys) {
+    const value = raw[key];
+    if (typeof value === "number") return value;
+  }
+  return void 0;
+}
+function round2(n) {
+  return Math.round(n * 100) / 100;
 }
 
 // src/spacemagic/visits/categorize.ts
@@ -196,7 +345,7 @@ function mapBirthdayBooking(visit) {
   const pr = visit.periodReservations?.[0];
   const raum = pr?.expositionName || "";
   const anzahl = (visit.periodReservations || []).reduce(
-    (sum, r) => sum + (r.quantity || 0),
+    (sum2, r) => sum2 + (r.quantity || 0),
     0
   );
   const { essen, upgrade } = extractEssen(visit.articles);
@@ -223,7 +372,7 @@ function mapBirthdayBooking(visit) {
 function mapEscapeBooking(visit) {
   const pr = visit.periodReservations?.[0];
   const anzahl = (visit.periodReservations || []).reduce(
-    (sum, r) => sum + (r.quantity || 0),
+    (sum2, r) => sum2 + (r.quantity || 0),
     0
   );
   return {
@@ -268,7 +417,7 @@ function uuidv4() {
 
 // src/spacemagic/birthday.ts
 var ZERO_GUID = "00000000-0000-0000-0000-000000000000";
-function round2(n) {
+function round22(n) {
   return Math.round(n * 100) / 100;
 }
 function buildBirthdayBasket(input) {
@@ -276,9 +425,9 @@ function buildBirthdayBasket(input) {
   const customerId = input.customerId ?? GUEST_CUSTOMER_ID;
   const paymentMethodId = input.paymentMethodId ?? PAYMENT_METHOD_ID_KARTENZAHLUNG;
   const extras = input.extras ?? [];
-  const depositAmount = round2(input.depositAmount);
-  const grossTotal = round2(input.grossTotal);
-  const balance = round2(grossTotal - depositAmount);
+  const depositAmount = round22(input.depositAmount);
+  const grossTotal = round22(input.grossTotal);
+  const balance = round22(grossTotal - depositAmount);
   const ENTRY_TYPE = "ReCreateX.WebShop.WebServices.Contracts.ExpositionPeriodReservationEntry, ReCreateX.WebShop.WebServices.Contracts";
   const entries = [
     {
@@ -360,6 +509,244 @@ function buildBirthdayBasket(input) {
   };
 }
 
-export { DIVISION_IDS, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, listGastroArticles, mapBirthdayBooking, mapEscapeBooking };
+// src/spacemagic/invoices.ts
+async function getBookingInvoiceDraft(client, criteria, options = {}, callOpts) {
+  const visit = await findBookingForInvoice(client, criteria, callOpts);
+  return buildBookingInvoiceDraft(visit, options);
+}
+async function findBookingForInvoice(client, criteria, callOpts) {
+  const baseCriteria = {
+    includes: { periodReservations: true, articles: true, personDetails: true }
+  };
+  if (criteria.organisedVisitId) {
+    const visits = await client.expositions.findOrganisedVisits(
+      { ...baseCriteria, organisedVisitId: criteria.organisedVisitId },
+      { maxPages: 1 },
+      callOpts
+    );
+    return oneVisit(visits, "organisedVisitId");
+  }
+  if (criteria.orderNumber) {
+    const visits = await client.expositions.findOrganisedVisits(
+      { ...baseCriteria, orderNumber: criteria.orderNumber },
+      { maxPages: 5 },
+      callOpts
+    );
+    return oneVisit(visits, "orderNumber");
+  }
+  if (criteria.bookingNo !== void 0) {
+    if (!criteria.fromYmd || !criteria.untilYmd) {
+      throw new Error("bookingNo lookup requires fromYmd and untilYmd");
+    }
+    const visits = await client.expositions.findOrganisedVisits(
+      {
+        ...baseCriteria,
+        fromYmd: criteria.fromYmd,
+        untilYmd: criteria.untilYmd
+      },
+      { maxPages: 50 },
+      callOpts
+    );
+    const bookingNo = String(criteria.bookingNo);
+    return oneVisit(visits.filter((visit) => String(visit.no) === bookingNo), "bookingNo");
+  }
+  throw new Error("Provide organisedVisitId, orderNumber, or bookingNo");
+}
+function buildBookingInvoiceDraft(visit, options = {}) {
+  const lines = [
+    ...(visit.periodReservations ?? []).map(periodReservationLine),
+    ...(visit.articles ?? []).map(articleLine)
+  ].filter((line) => options.includeZeroAmountLines || line.amount !== 0 || line.lineAmount !== 0);
+  const totals = {
+    amount: round23(sum(lines, "amount") || numberValue(visit.totalAmount)),
+    lineAmount: round23(sum(lines, "lineAmount")),
+    vatAmount: round23(sum(lines, "vatAmount")),
+    paidAmount: numberValue(visit.postedAmount),
+    balance: numberValue(visit.balance),
+    couponDiscount: numberValue(visit.couponDiscount)
+  };
+  return {
+    bookingId: visit.id,
+    bookingNo: visit.no,
+    ...visit.orderNumber && { orderNumber: visit.orderNumber },
+    startDate: visit.startDate,
+    endDate: visit.endDate,
+    ...visit.purchaseDate && { purchaseDate: visit.purchaseDate },
+    ...visit.comment && { comment: visit.comment },
+    customer: readInvoiceCustomer(visit),
+    lines,
+    totals,
+    salesInfos: (visit.salesInfos ?? []).map((info) => ({
+      salesSeriesId: info.id,
+      salesNo: info.salesNo,
+      salesDate: info.salesDate,
+      ...info.invoiceNumber !== void 0 && { invoiceNumber: info.invoiceNumber },
+      ...info.invoiceDate && { invoiceDate: info.invoiceDate }
+    })),
+    raw: visit
+  };
+}
+function renderBookingInvoiceHtml(draft) {
+  const lineRows = draft.lines.map((line) => `
+      <tr>
+        <td>${escapeHtml(line.description)}</td>
+        <td class="num">${line.quantity}</td>
+        <td class="num">${formatEur(line.unitPrice)}</td>
+        <td class="num">${formatEur(line.amount)}</td>
+      </tr>`).join("");
+  return `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Rechnung Buchung ${draft.bookingNo}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #111; }
+    h1 { font-size: 24px; margin-bottom: 4px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 24px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f4f4f4; }
+    .num { text-align: right; }
+    .muted { color: #666; }
+    .totals { margin-top: 20px; width: 320px; margin-left: auto; }
+  </style>
+</head>
+<body>
+  <h1>Rechnung / Buchungsbeleg</h1>
+  <div class="muted">Buchung ${draft.bookingNo}${draft.orderNumber ? ` \xB7 Order ${escapeHtml(draft.orderNumber)}` : ""}</div>
+
+  <p>
+    <strong>${escapeHtml(draft.customer.name || "Gast")}</strong><br>
+    ${escapeHtml([draft.customer.street, draft.customer.number].filter(Boolean).join(" "))}<br>
+    ${escapeHtml([draft.customer.zipCode, draft.customer.town].filter(Boolean).join(" "))}
+  </p>
+
+  <p>
+    Leistungszeitraum: ${escapeHtml(draft.startDate)} bis ${escapeHtml(draft.endDate)}
+  </p>
+
+  <table>
+    <thead><tr><th>Position</th><th class="num">Menge</th><th class="num">Einzelpreis</th><th class="num">Betrag</th></tr></thead>
+    <tbody>${lineRows}</tbody>
+  </table>
+
+  <table class="totals">
+    <tr><td>Netto</td><td class="num">${formatEur(draft.totals.lineAmount)}</td></tr>
+    <tr><td>MwSt.</td><td class="num">${formatEur(draft.totals.vatAmount)}</td></tr>
+    <tr><td><strong>Gesamt</strong></td><td class="num"><strong>${formatEur(draft.totals.amount)}</strong></td></tr>
+    <tr><td>Bezahlt</td><td class="num">${formatEur(draft.totals.paidAmount)}</td></tr>
+    <tr><td>Offen</td><td class="num">${formatEur(draft.totals.balance)}</td></tr>
+  </table>
+</body>
+</html>`;
+}
+function periodReservationLine(item) {
+  const raw = item;
+  return {
+    source: "periodReservation",
+    id: readString2(raw, "id"),
+    articleId: item.articleId,
+    ...item.articleCode && { articleCode: item.articleCode },
+    description: item.articleName || item.expositionName || "Buchung",
+    quantity: numberValue(item.quantity),
+    unitPrice: numberValue(item.unitPrice),
+    amount: numberValue(item.amount),
+    lineAmount: numberValue(item.lineAmount),
+    vatAmount: numberValue(item.vatAmount),
+    ...readNumber(raw, "vatPercentage") !== void 0 && { vatPercentage: readNumber(raw, "vatPercentage") },
+    ...item.expositionName && { expositionName: item.expositionName },
+    ...item.expositionPeriodFrom && { periodFrom: item.expositionPeriodFrom },
+    ...item.expositionPeriodUntil && { periodUntil: item.expositionPeriodUntil }
+  };
+}
+function articleLine(item) {
+  const raw = item;
+  const lineAmount = readNumber(raw, "lineAmount") ?? numberValue(item.amount);
+  const vatAmount = readNumber(raw, "vatAmount") ?? 0;
+  return {
+    source: "article",
+    id: readString2(raw, "id"),
+    articleId: item.articleId,
+    ...item.articleCode && { articleCode: item.articleCode },
+    description: item.articleName || "Artikel",
+    quantity: numberValue(item.quantity),
+    unitPrice: numberValue(item.unitPrice),
+    amount: numberValue(item.amount),
+    lineAmount,
+    vatAmount,
+    ...readNumber(raw, "vatPercentage") !== void 0 && { vatPercentage: readNumber(raw, "vatPercentage") }
+  };
+}
+function readInvoiceCustomer(visit) {
+  const guest = (visit.salesInfos ?? []).map((info) => info.guest).find(Boolean);
+  if (guest) {
+    const firstName2 = guest.firstName?.trim();
+    const lastName2 = guest.name?.trim();
+    return {
+      name: [firstName2, lastName2].filter(Boolean).join(" ") || guest.email || "",
+      ...firstName2 && { firstName: firstName2 },
+      ...lastName2 && { lastName: lastName2 },
+      ...guest.email && { email: guest.email },
+      ...guest.telephone !== void 0 && { telephone: guest.telephone },
+      ...guest.street1 && { street: guest.street1 },
+      ...guest.street2 && { number: guest.street2 },
+      ...guest.zipCode && { zipCode: guest.zipCode },
+      ...guest.home && { town: guest.home }
+    };
+  }
+  const person = visit.person;
+  const nestedName = person?.name;
+  const firstName = person?.firstName ?? readString2(nestedName, "first");
+  const lastName = person?.lastName ?? readString2(nestedName, "last");
+  const address = person?.address;
+  return {
+    name: [firstName, lastName].filter(Boolean).join(" ") || person?.email || "",
+    ...firstName && { firstName },
+    ...lastName && { lastName },
+    ...person?.email && { email: person.email },
+    ...person?.cellPhone && { telephone: person.cellPhone },
+    ...address?.street && { street: address.street },
+    ...address?.number && { number: address.number },
+    ...address?.zipCode && { zipCode: address.zipCode },
+    ...address?.town && { town: address.town },
+    ...address?.countryDescription && { country: address.countryDescription }
+  };
+}
+function oneVisit(visits, label) {
+  if (visits.length === 0) throw new Error(`No OrganisedVisit matched ${label}`);
+  if (visits.length > 1) throw new Error(`Multiple OrganisedVisits matched ${label}`);
+  return visits[0];
+}
+function sum(lines, key) {
+  return lines.reduce((total, line) => total + numberValue(line[key]), 0);
+}
+function numberValue(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+function readString2(obj, ...keys) {
+  if (!obj) return void 0;
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string") return value;
+  }
+  return void 0;
+}
+function readNumber(obj, ...keys) {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "number") return value;
+  }
+  return void 0;
+}
+function round23(n) {
+  return Math.round(n * 100) / 100;
+}
+function formatEur(n) {
+  return `${n.toFixed(2).replace(".", ",")} EUR`;
+}
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+export { DIVISION_IDS, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, buildBirthdayBasket, buildBookingInvoiceDraft, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findBookingForInvoice, findVoucher, gastroGroupName, getBookingInvoiceDraft, isGastroGroup, listGastroArticles, mapBirthdayBooking, mapEscapeBooking, renderBookingInvoiceHtml, syncGastroSales };
 //# sourceMappingURL=spacemagic.js.map
 //# sourceMappingURL=spacemagic.js.map

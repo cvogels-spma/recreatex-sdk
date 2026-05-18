@@ -4,6 +4,7 @@
  */
 
 import type { RecreatexDateTime } from './common.js';
+import type { Basket } from './basket.js';
 
 export interface AccessZoneOccupancy {
   maxVisitors: number;
@@ -146,6 +147,88 @@ export interface FindSalesCriteria {
   until: RecreatexDateTime;
   pointOfSaleId?: string;
   divisionId?: string;
+}
+
+// ---- Discount codes / vouchers ------------------------------------------
+
+export type CouponStatus =
+  | 0  // Success
+  | 1  // CouponNotFound
+  | 2  // CouponCanNotBeUsedByAddressGroup
+  | 3  // CouponCanNotBeUsedInDivision
+  | 4  // CouponIsNotValidYet
+  | 5  // CouponExpired
+  | 6  // CouponUsedInInvalidTimeframe
+  | 7  // CouponUsedOnWrongDayOfWeek
+  | 8  // CouponCanNotBeUsedInThisSalesChannel
+  | 9  // CouponMaximumNumberOfUsagesReached
+  | 10 // CouponNotApplicableToSales
+  | 11 // CouponSalesSeriesAlreadyUsed
+  | 12 // CouponsCanNotBeUsedTogether
+  | 13 // CouponInsufficientCredits
+  | 14 // CouponIsNoVoucher
+  | 15 // CouponMaximumNumberOfUsagesPerCustomerReached
+  | 16 // CouponIsPromotionRule
+  | 17 // CouponIsNotValidOnPointOfSale
+  | number;
+
+export interface CouponDiscount {
+  discountAmount?: number;
+  couponID?: string;
+  couponId?: string;
+  couponCode?: string;
+  couponDescription?: string;
+  [extra: string]: unknown;
+}
+
+export interface CouponCalculationResult {
+  status: CouponStatus;
+  discounts: CouponDiscount[];
+  [extra: string]: unknown;
+}
+
+export interface CouponReservationResult extends CouponCalculationResult {
+  couponReservations: string[];
+}
+
+export interface CouponReleaseResult {
+  isSuccess: boolean;
+  message?: string | null;
+}
+
+export type GiftCertificateStatus =
+  | 0  // Success
+  | 1  // GiftCertificateNotFound
+  | 2  // GiftCertificateHasNoBalance
+  | number;
+
+export interface GiftCertificateDiscount {
+  number?: string;
+  divisionCardID?: string;
+  remainingAmount?: number;
+  [extra: string]: unknown;
+}
+
+export interface GiftCertificateCalculationResult {
+  status: GiftCertificateStatus;
+  discounts: GiftCertificateDiscount[];
+  [extra: string]: unknown;
+}
+
+export interface VoucherState {
+  voucherCode: string;
+  status: CouponStatus | number;
+  [extra: string]: unknown;
+}
+
+export interface VoucherValidateResult {
+  voucherStates: VoucherState[];
+  couponDetails: unknown[];
+  [extra: string]: unknown;
+}
+
+export interface DiscountBasketCriteria {
+  basket: Basket;
 }
 
 // ---- Gift certificates --------------------------------------------------

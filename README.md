@@ -14,7 +14,14 @@ One package, two subpath exports:
 
 ```ts
 import { ReCreateXClient } from 'recreatex-sdk/core';
-import { SHOP_ID, GUEST_CUSTOMER_ID, VOUCHER_SKUS, listGastroArticles } from 'recreatex-sdk/spacemagic';
+import {
+  SHOP_ID,
+  GUEST_CUSTOMER_ID,
+  VOUCHER_SKUS,
+  getBookingInvoiceDraft,
+  listGastroArticles,
+  syncGastroSales,
+} from 'recreatex-sdk/spacemagic';
 
 const rx = new ReCreateXClient({
   baseUrl:  'https://wsdlspacemagic.recreatex.be',
@@ -47,6 +54,14 @@ const hamburger = await rx.articles.getArticleSalesReport({
   until: '2026-05-31 23:59:59.000',
 });
 console.log(`Hamburger sold: ${hamburger.totals.quantity}`);
+
+// Robust day-by-day gastro sales sync
+const gastroSales = await syncGastroSales(rx, { fromYmd: '2026-05-01', untilYmd: '2026-05-18' });
+console.log(gastroSales.totals);
+
+// Invoice-ready draft for a historical booking
+const invoice = await getBookingInvoiceDraft(rx, { organisedVisitId: '...' });
+console.log(invoice.totals);
 ```
 
 ## Install
@@ -80,6 +95,8 @@ type-defs scraped from live captures. This SDK consolidates the lot:
 - automatic retry on network + 5xx, never on validation errors
 - auto-pagination for `FindOrganisedVisits` and `FindArticles`
 - article-level sales reports (`FindArticleSalesOrders` + price information)
+- coupon/voucher validation helpers (`CouponCalculate`, `CouponReserve`, `VoucherValidate`)
+- historical booking invoice drafts and OrganisedVisit document downloads
 - known-pitfalls hard-coded so you don't trip the `Article: null` /
   `MissingCustomer` / `PayLater` traps
 

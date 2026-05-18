@@ -780,6 +780,72 @@ var GeneralModule = class {
     );
     return data.sales ?? [];
   }
+  // ---- Discount codes / vouchers ---------------------------------------
+  /** Validate and calculate coupon-code discounts for the current basket. */
+  async couponCalculate(basket, callOpts) {
+    const data = await this.client.post(
+      "Json/General/CouponCalculate",
+      { Criteria: { Basket: basket } },
+      callOpts ?? {}
+    );
+    const result = data.couponCalculateResult ?? data.CouponCalculateResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("CouponCalculate: no result in response");
+    return normalizeCouponResult(result);
+  }
+  /** Reserve coupon-code discounts for checkout; release with {@link couponRelease}. */
+  async couponReserve(basket, callOpts) {
+    const data = await this.client.post(
+      "Json/General/CouponReserve",
+      { Criteria: { Basket: basket } },
+      callOpts ?? {}
+    );
+    const result = data.couponReserveResult ?? data.CouponReserveResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("CouponReserve: no result in response");
+    return {
+      ...normalizeCouponResult(result),
+      couponReservations: result.couponReservations ?? []
+    };
+  }
+  /** Release coupon reservations tied to the current session id. */
+  async couponRelease(callOpts) {
+    const data = await this.client.post(
+      "Json/General/CouponRelease",
+      {},
+      callOpts ?? {}
+    );
+    const result = data.couponReleaseResult ?? data.CouponReleaseResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("CouponRelease: no result in response");
+    return result;
+  }
+  /** Calculate gift-certificate discounts for the current basket. */
+  async giftCertificateCalculate(basket, callOpts) {
+    const data = await this.client.post(
+      "Json/General/GiftCertificateCalculate",
+      { Criteria: { Basket: basket } },
+      callOpts ?? {}
+    );
+    const result = data.giftCertificateCalculateResult ?? data.GiftCertificateCalculateResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("GiftCertificateCalculate: no result in response");
+    return {
+      ...result,
+      discounts: result.discounts ?? []
+    };
+  }
+  /** Validate voucher codes and return voucher states / linked coupon details. */
+  async voucherValidate(voucherCodes, callOpts) {
+    const data = await this.client.post(
+      "Json/General/VoucherValidate",
+      { Criteria: { VoucherCodes: voucherCodes } },
+      callOpts ?? {}
+    );
+    const result = data.voucherValidateResult ?? data.VoucherValidateResult ?? data.result ?? data.Result;
+    if (!result) throw new Error("VoucherValidate: no result in response");
+    return {
+      ...result,
+      voucherStates: result.voucherStates ?? [],
+      couponDetails: result.couponDetails ?? []
+    };
+  }
   // ---- Basket flow -------------------------------------------------------
   /** Recalculate prices, discounts, VAT for a basket without committing. */
   async reCalculateBasket(basket, callOpts) {
@@ -871,6 +937,12 @@ var GeneralModule = class {
     );
   }
 };
+function normalizeCouponResult(result) {
+  return {
+    ...result,
+    discounts: result.discounts ?? []
+  };
+}
 
 // src/core/modules/manager.ts
 var ManagerModule = class {
@@ -955,6 +1027,20 @@ var DocumentsModule = class {
     const lang = language ?? this.client.options.language ?? "de";
     const shopId = this.client.options.shopId;
     const url = `${this.base}/Help/GiftCertificates/${shopId}/${lang}`;
+    return this.client.getBinary(url, callOpts ?? {});
+  }
+  /** Download the configured OrganisedVisit PDF for a historical booking. */
+  async organisedVisitPdf(req, callOpts) {
+    const lang = req.language ?? this.client.options.language ?? "de";
+    const shopId = req.shopId ?? this.client.options.shopId;
+    const url = `${this.base}/OrganisedVisits/${shopId}/${lang}/${req.organisedVisitId}`;
+    return this.client.getBinary(url, callOpts ?? {});
+  }
+  /** Discover merge-fields supported by the configured OrganisedVisit template. */
+  async organisedVisitHelp(language, callOpts) {
+    const lang = language ?? this.client.options.language ?? "de";
+    const shopId = this.client.options.shopId;
+    const url = `${this.base}/Help/OrganisedVisits/${shopId}/${lang}`;
     return this.client.getBinary(url, callOpts ?? {});
   }
 };

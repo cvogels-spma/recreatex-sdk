@@ -14,3 +14,12 @@ export interface GiftCertificatePdfRequest {
   /** Override the shop ID (else taken from the client config). */
   shopId?: string;
 }
+
+export interface OrganisedVisitPdfRequest {
+  /** OrganisedVisit GUID from `FindOrganisedVisits`. */
+  organisedVisitId: string;
+  /** ISO language code; the Space Magic template only ships `de`. */
+  language?: 'de' | 'en' | 'nl' | 'fr';
+  /** Override the shop ID (else taken from the client config). */
+  shopId?: string;
+}

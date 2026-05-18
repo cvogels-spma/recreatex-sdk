@@ -146,6 +146,23 @@ describe('ReCreateXClient', () => {
     await expect(rx.post('Json/Foo/Bar', {})).rejects.toBeInstanceOf(RecreatexTimeoutError);
   });
 
+  it('retries binary downloads on 5xx and succeeds on the second attempt', async () => {
+    let n = 0;
+    const fetch = mockFetch(async () => {
+      n++;
+      if (n === 1) return new Response('temporary failure', { status: 502 });
+      return new Response('pdf bytes', { status: 200 });
+    });
+    const rx = new ReCreateXClient({
+      ...baseConfig,
+      fetch,
+      retry: { attempts: 3, backoffMs: 1, maxBackoffMs: 1 },
+    });
+    const blob = await rx.getBinary('https://test.recreatex.example/WebShopDocumentService.svc/foo');
+    expect(await blob.text()).toBe('pdf bytes');
+    expect(n).toBe(2);
+  });
+
   it('rejects empty baseUrl', () => {
     expect(() => new ReCreateXClient({ ...baseConfig, baseUrl: '' })).toThrow();
   });

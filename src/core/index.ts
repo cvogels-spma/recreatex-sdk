@@ -2,7 +2,7 @@
  * @recreatex-sdk/core — TypeScript client for the Recreatex JSON API.
  *
  * @example
- *   import { ReCreateXClient } from '@recreatex-sdk/core';
+ *   import { ReCreateXClient } from 'recreatex-sdk/core';
  *
  *   const rx = new ReCreateXClient({
  *     baseUrl: 'https://wsdlspacemagic.recreatex.be',

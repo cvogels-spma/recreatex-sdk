@@ -119,6 +119,22 @@ describe('GeneralModule', () => {
     expect(r.salesItems?.[0]?.id).toBe('line-1');
   });
 
+  it('checkoutBasket falls back to a PascalCase Result envelope', async () => {
+    const { fetch } = fetchSpy({
+      Result: {
+        resultState: 0,
+        salesOrderNumber: 'SO-456',
+        salesSeriesId: 'series-2',
+        basketValidationResult: { isValid: true },
+        salesItems: [{ id: 'line-2', salesNumber: 8 }],
+      },
+    });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const r = await rx.general.checkoutBasket({ CustomerId: 'cust', Items: [] });
+    expect(r.salesOrderNumber).toBe('SO-456');
+    expect(r.salesItems?.[0]?.id).toBe('line-2');
+  });
+
   it('findGiftCertificates reads `findGiftCertificatesResult.giftCertificates`', async () => {
     const cert = {
       id: 'gc-1',

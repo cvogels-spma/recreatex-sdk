@@ -161,7 +161,7 @@ export function buildBirthdayBasket(input: BirthdayBookingInput): Basket {
   //   "Quantity is not supported For ExpositionPeriodReservation.
   //    Use ExpositionPeriodReservationEntry instead."
   // We send `Quantity: 0` (the BasketItemBase requires the field) and
-  // carry the real seat count on `Entries[].Quantity`.
+  // carry the real seat count on `Entries[].ParticipantCount`.
   const periodReservation: ExpositionPeriodReservationItem = {
     $type: BasketTypeStrings.ExpositionPeriodReservation,
     Id: uuidv4(),

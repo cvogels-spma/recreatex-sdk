@@ -562,10 +562,11 @@ var GeneralModule = class {
       { Basket: basket },
       callOpts ?? {}
     );
-    if (!data.result) {
+    const result = data.result ?? data.Result;
+    if (!result) {
       throw new Error("CheckoutBasket: no result in response");
     }
-    return data.result;
+    return result;
   }
   // ---- Gift certificates -----------------------------------------------
   /**
@@ -787,21 +788,27 @@ var ReCreateXClient = class {
   /** Low-level GET — only used by the document service for binary downloads. */
   async getBinary(url, callOpts = {}) {
     const timeoutMs = callOpts.timeoutMs ?? this.options.timeoutMs;
-    const ac = new AbortController();
-    const onParentAbort = () => ac.abort(callOpts.signal?.reason);
-    callOpts.signal?.addEventListener("abort", onParentAbort, { once: true });
-    const timer = setTimeout(() => ac.abort(new RecreatexTimeoutError(url, timeoutMs)), timeoutMs);
-    try {
-      const res = await this._fetch(url, { method: "GET", signal: ac.signal });
-      if (!res.ok) {
-        const text = await safeReadText(res);
-        throw new RecreatexHttpError(res.status, url, text);
+    const retryOpts = callOpts.noRetry ? { attempts: 1, ...callOpts.signal && { signal: callOpts.signal } } : { ...this.options.retry ?? {}, ...callOpts.signal && { signal: callOpts.signal } };
+    return withRetry(async () => {
+      const ac = new AbortController();
+      const onParentAbort = () => ac.abort(callOpts.signal?.reason);
+      callOpts.signal?.addEventListener("abort", onParentAbort, { once: true });
+      const timer = setTimeout(() => ac.abort(new RecreatexTimeoutError(url, timeoutMs)), timeoutMs);
+      try {
+        const res = await this._fetch(url, { method: "GET", signal: ac.signal });
+        if (!res.ok) {
+          const text = await safeReadText(res);
+          throw new RecreatexHttpError(res.status, url, text);
+        }
+        return await res.blob();
+      } catch (err) {
+        if (ac.signal.reason instanceof RecreatexTimeoutError) throw ac.signal.reason;
+        throw err;
+      } finally {
+        clearTimeout(timer);
+        callOpts.signal?.removeEventListener("abort", onParentAbort);
       }
-      return await res.blob();
-    } finally {
-      clearTimeout(timer);
-      callOpts.signal?.removeEventListener("abort", onParentAbort);
-    }
+    }, retryOpts);
   }
 };
 function assertOk(data, endpoint) {

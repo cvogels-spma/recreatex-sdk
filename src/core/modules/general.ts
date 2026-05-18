@@ -84,6 +84,14 @@ interface FindGiftCertificatesResponse {
   message?: string;
 }
 
+interface CheckoutEnvelopeResponse {
+  result?: CheckoutResponse['result'];
+  /** PascalCase fallback for older Recreatex builds. */
+  Result?: CheckoutResponse['result'];
+  succes?: boolean;
+  message?: string;
+}
+
 interface RecalcResponse {
   basket?: Basket;
   /** PascalCase fallback for older Recreatex builds. */
@@ -270,15 +278,16 @@ export class GeneralModule {
    *   document service).
    */
   async checkoutBasket(basket: Basket, callOpts?: CallOptions): Promise<CheckoutResponse['result']> {
-    const data = await this.client.post<CheckoutResponse & { succes?: boolean; message?: string }>(
+    const data = await this.client.post<CheckoutEnvelopeResponse>(
       'Json/General/CheckoutBasket',
       { Basket: basket },
       callOpts ?? {},
     );
-    if (!data.result) {
+    const result = data.result ?? data.Result;
+    if (!result) {
       throw new Error('CheckoutBasket: no result in response');
     }
-    return data.result;
+    return result;
   }
 
   // ---- Gift certificates -----------------------------------------------

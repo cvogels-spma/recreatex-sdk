@@ -36,7 +36,7 @@ const visits = await rx.expositions.findOrganisedVisits({
 
 ```bash
 # from a consuming project (npm or pnpm)
-npm install git+https://github.com/cvogels-spma/recreatex-sdk.git#v0.1.0
+npm install git+https://github.com/cvogels-spma/recreatex-sdk.git#v0.2.0
 # or pin a specific commit:
 npm install git+https://github.com/cvogels-spma/recreatex-sdk.git#abc1234
 ```

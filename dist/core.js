@@ -195,7 +195,7 @@ var ArticlesModule = class {
       {},
       callOpts ?? {}
     );
-    return data.articleGroups ?? [];
+    return data.groups ?? [];
   }
 };
 

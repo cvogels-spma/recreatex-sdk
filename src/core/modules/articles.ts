@@ -17,7 +17,9 @@ interface FindArticlesResponse {
 }
 
 interface ListArticleGroupsResponse {
-  articleGroups?: ArticleGroup[];
+  // The API returns the array under `groups`, not `articleGroups` (live-verified
+  // against wsdlspacemagic.recreatex.be 2026-05-24).
+  groups?: ArticleGroup[];
   succes?: boolean;
   message?: string;
 }
@@ -86,6 +88,6 @@ export class ArticlesModule {
       {},
       callOpts ?? {},
     );
-    return data.articleGroups ?? [];
+    return data.groups ?? [];
   }
 }

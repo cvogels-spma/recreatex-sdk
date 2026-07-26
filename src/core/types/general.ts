@@ -115,9 +115,29 @@ export interface FindPersonCriteria {
   username?: string;
 }
 
+/**
+ * A single line on a FindSales bon.
+ *
+ * ⚠ **Recreatex returns duplicate line objects.** The same line comes back
+ * repeatedly with an identical `id`, `sequenceNumber` and amount — the
+ * repetition factor appears to follow the number of joined records upstream,
+ * and it mainly hits lines carrying a `mainOrganisedVisitId` (booking-bound
+ * articles such as "Ausstellung Vorauszahlung"). Verified 2026-07-26: a bon
+ * holding ONE real 806 € line came back 8× = 6.448 €.
+ *
+ * **Always deduplicate by `id` before summing.** Summing `lines` raw inflates
+ * revenue massively — on one production month it turned a reconciled
+ * 200.237,10 € into 284.934,70 €.
+ */
 export interface SaleLine {
+  /** Line GUID. Duplicates share it — dedupe on this. */
+  id?: string;
+  /** Stable within the bon; duplicates share it too. */
+  sequenceNumber?: number;
   articleId?: string;
   description?: string;
+  /** Set on booking-bound lines; correlates with the duplication. */
+  mainOrganisedVisitId?: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -130,12 +150,37 @@ export interface SalePaymentLine {
   [extra: string]: unknown;
 }
 
+/**
+ * A bon from `General/FindSales`.
+ *
+ * Field list verified against production on 2026-07-26: `$type`, `customerId`,
+ * `date`, `divisonId`, `id`, `lines`, `number`, `paymentLines`,
+ * `pointOfSaleId`, `salesSeriesId`.
+ *
+ * ⚠ Two traps:
+ *  1. The timestamp is **`date`**, not `saleDate` — older versions of this
+ *     type declared `saleDate` as required, which silently yielded `undefined`.
+ *  2. There is **no card / wristband reference** on a bon. A bon cannot be
+ *     traced back to the RFID band it was booked on through this API.
+ *
+ * See {@link SaleLine} for the line-duplication trap.
+ */
 export interface Sale {
   id: string;
-  saleDate: RecreatexDateTime;
+  /** Bon timestamp, e.g. `"2025-08-06T09:52:30"`. THIS is the real field. */
+  date?: RecreatexDateTime;
+  /** @deprecated Not emitted by Recreatex — use {@link Sale.date}. */
+  saleDate?: RecreatexDateTime;
+  /** Human-readable bon number, e.g. `1000008439`. */
+  number?: number;
   pointOfSaleId?: string;
+  /** Note the upstream typo — one `i`. */
+  divisonId?: string;
   customerId?: string | null;
-  totalAmount: number;
+  salesSeriesId?: string;
+  /** @deprecated Not emitted by Recreatex — sum the deduped {@link Sale.lines}. */
+  totalAmount?: number;
+  /** ⚠ Contains duplicates — dedupe by `id`. See {@link SaleLine}. */
   lines?: SaleLine[];
   paymentLines?: SalePaymentLine[];
   [extra: string]: unknown;
@@ -158,27 +203,27 @@ export interface FindSalesCriteria {
  * they all live in the same PersonCard table, distinguished by their type
  * and by whether a person is attached.
  *
- * ⚠ **Shape caveat.** The endpoint's existence is verified against
- * `wsdlspacemagic.recreatex.be` (it answers `succes:false / "Invalid WSDL
- * password"` rather than Nancy's 404), but the field set below has NOT been
- * confirmed against an authenticated live response yet. Only `id` is assumed;
- * everything else is optional and the index signature keeps unknown fields
- * reachable. Tighten this once a real payload has been observed — and delete
- * this warning when you do.
+ * Field list verified against production on 2026-07-27: `$type`, `id`,
+ * `description`, `card`, `personId`, `person`.
+ *
+ * ⚠ **There is no balance field.** The stored value of an RFID wristband lives
+ * in the Gantner purse and is not reachable through this API — no endpoint
+ * exposes it (see `docs/ENDPOINTS.md`). Do not promise "remaining credit" to a
+ * caller based on this record.
+ *
+ * ⚠ This endpoint also has no "currently open / checked in" filter, so it
+ * cannot enumerate the bands still inside the park.
  */
 export interface PersonCard {
   id: string;
-  /** Printed / encoded card number — the number staff read off the wristband. */
-  number?: string | null;
-  code?: string | null;
+  /** Card number as encoded on the wristband. */
+  card?: string | null;
+  /** Plain-text label of the card. */
+  description?: string | null;
   /** Attached person, when the card is not anonymous. */
   personId?: string | null;
-  /** Remaining stored value, if the card carries a purse. */
-  balance?: number | null;
-  validFrom?: string | null;
-  validTill?: string | null;
-  blocked?: boolean | null;
-  /** Unmapped upstream fields — inspect these when tightening the type. */
+  person?: unknown;
+  /** Unmapped upstream fields. */
   [extra: string]: unknown;
 }
 

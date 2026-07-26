@@ -175,13 +175,18 @@ describe('GeneralModule', () => {
   });
 
   it('findPersonCards sends paging + filters and reads the nested result', async () => {
+    // Shape wie live verifiziert (2026-07-27): id, description, card, personId,
+    // person — insbesondere KEIN Guthaben-Feld.
     const { fetch, calls } = fetchSpy({
-      findPersonCardsResult: { personCards: [{ id: 'pc-1', number: '00123', balance: 4.5 }] },
+      findPersonCardsResult: {
+        personCards: [{ id: 'pc-1', card: '00123', description: 'Jahreskarte', personId: 'p-1' }],
+      },
     });
     const rx = new ReCreateXClient({ ...baseConfig, fetch });
     const cards = await rx.general.findPersonCards({ number: '00123', pageSize: 10 });
     expect(cards).toHaveLength(1);
-    expect(cards[0]?.balance).toBe(4.5);
+    expect(cards[0]?.card).toBe('00123');
+    expect(cards[0]?.personId).toBe('p-1');
     const body = calls[0]?.body as { Criteria?: Record<string, unknown> } | null;
     expect(body?.Criteria?.Number).toBe('00123');
     expect(body?.Criteria?.Paging).toMatchObject({ PageIndex: 0, PageSize: 10 });

@@ -398,6 +398,46 @@ interface FindSalesCriteria {
     divisionId?: string;
 }
 /**
+ * A card record as returned by `General/FindPersonCards`.
+ *
+ * In a Gantner-driven park this is the entity behind a **physical RFID
+ * wristband** as well as behind subscription and gift-certificate cards —
+ * they all live in the same PersonCard table, distinguished by their type
+ * and by whether a person is attached.
+ *
+ * ⚠ **Shape caveat.** The endpoint's existence is verified against
+ * `wsdlspacemagic.recreatex.be` (it answers `succes:false / "Invalid WSDL
+ * password"` rather than Nancy's 404), but the field set below has NOT been
+ * confirmed against an authenticated live response yet. Only `id` is assumed;
+ * everything else is optional and the index signature keeps unknown fields
+ * reachable. Tighten this once a real payload has been observed — and delete
+ * this warning when you do.
+ */
+interface PersonCard {
+    id: string;
+    /** Printed / encoded card number — the number staff read off the wristband. */
+    number?: string | null;
+    code?: string | null;
+    /** Attached person, when the card is not anonymous. */
+    personId?: string | null;
+    /** Remaining stored value, if the card carries a purse. */
+    balance?: number | null;
+    validFrom?: string | null;
+    validTill?: string | null;
+    blocked?: boolean | null;
+    /** Unmapped upstream fields — inspect these when tightening the type. */
+    [extra: string]: unknown;
+}
+interface FindPersonCardsCriteria {
+    id?: string;
+    /** Card number as printed/encoded on the wristband. */
+    number?: string;
+    personId?: string;
+    customerId?: string;
+    pageIndex?: number;
+    pageSize?: number;
+}
+/**
  * A single gift-certificate record as returned by `FindGiftCertificates`.
  *
  * Heads-up: `number` is typically null for a freshly-created certificate
@@ -500,6 +540,28 @@ declare class GeneralModule {
      *   const cert = certs.find((c) => c.salesSeriesID === checkoutResult.SalesSeriesId);
      */
     findGiftCertificates(criteria: FindGiftCertificatesCriteria, callOpts?: CallOptions): Promise<GiftCertificate[]>;
+    /**
+     * Look up cards (RFID wristbands, subscription cards, voucher cards).
+     *
+     * This is the only card-level endpoint the JSON service exposes — probing
+     * confirmed that `FindCards`, `GetCards`, `FindCustomerCards`,
+     * `FindCardTransactions`, `GetCardBalance` and the whole `Access/` and
+     * `Cards/` namespaces all 404. If you need per-wristband data, it comes
+     * from here or not at all.
+     *
+     * ⚠ The response shape is not yet verified against an authenticated call —
+     * see the caveat on {@link PersonCard}. Treat the result as
+     * shape-tolerant and log `[extra]` fields the first time you run it.
+     *
+     * ⚠ This does NOT enumerate "currently inside the park". Live occupancy is
+     * a counter on the access zone (`findAccessZones().occupancy`), and the
+     * JSON service exposes no endpoint that maps that count back to the
+     * individual bands behind it.
+     *
+     * @example
+     *   const cards = await client.general.findPersonCards({ number: '1234' });
+     */
+    findPersonCards(criteria?: FindPersonCardsCriteria, callOpts?: CallOptions): Promise<PersonCard[]>;
     /**
      * Mark a gift certificate as printed/delivered. Recreatex sets `printDate`
      * on the cert. Best-effort — if it fails, the voucher is still valid; the
@@ -823,4 +885,4 @@ declare function ymdWindow(before: number, after: number, today?: Date, tz?: str
     untilYmd: Ymd;
 };
 
-export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCardsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCard, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };

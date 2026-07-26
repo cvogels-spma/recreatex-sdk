@@ -148,6 +148,50 @@ export interface FindSalesCriteria {
   divisionId?: string;
 }
 
+// ---- Person cards (RFID wristbands, subscription & voucher cards) --------
+
+/**
+ * A card record as returned by `General/FindPersonCards`.
+ *
+ * In a Gantner-driven park this is the entity behind a **physical RFID
+ * wristband** as well as behind subscription and gift-certificate cards —
+ * they all live in the same PersonCard table, distinguished by their type
+ * and by whether a person is attached.
+ *
+ * ⚠ **Shape caveat.** The endpoint's existence is verified against
+ * `wsdlspacemagic.recreatex.be` (it answers `succes:false / "Invalid WSDL
+ * password"` rather than Nancy's 404), but the field set below has NOT been
+ * confirmed against an authenticated live response yet. Only `id` is assumed;
+ * everything else is optional and the index signature keeps unknown fields
+ * reachable. Tighten this once a real payload has been observed — and delete
+ * this warning when you do.
+ */
+export interface PersonCard {
+  id: string;
+  /** Printed / encoded card number — the number staff read off the wristband. */
+  number?: string | null;
+  code?: string | null;
+  /** Attached person, when the card is not anonymous. */
+  personId?: string | null;
+  /** Remaining stored value, if the card carries a purse. */
+  balance?: number | null;
+  validFrom?: string | null;
+  validTill?: string | null;
+  blocked?: boolean | null;
+  /** Unmapped upstream fields — inspect these when tightening the type. */
+  [extra: string]: unknown;
+}
+
+export interface FindPersonCardsCriteria {
+  id?: string;
+  /** Card number as printed/encoded on the wristband. */
+  number?: string;
+  personId?: string;
+  customerId?: string;
+  pageIndex?: number;
+  pageSize?: number;
+}
+
 // ---- Gift certificates --------------------------------------------------
 
 /**

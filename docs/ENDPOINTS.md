@@ -31,6 +31,7 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `general` | `reCalculateBasket(basket)` | `/Json/General/ReCalculateBasket/` | Basket totals |
 | `general` | `lockBasketItems(items)` | `/Json/General/LockBasketItems/` | Reserve items for payment |
 | `general` | `checkoutBasket(basket)` | `/Json/General/CheckoutBasket/` | Finalise sale |
+| `general` | `findPersonCards(criteria)` | `/Json/General/FindPersonCards/` | Cards / RFID wristbands (shape unverified, see below) |
 | `general` | `findGiftCertificates(criteria)` | `/Json/General/FindGiftCertificates/` | Look up gift certificates by customer / id / number |
 | `general` | `setGiftCertificatePrinted(id)` | `/Json/General/SetGiftCertificatePrinted/` | Mark a cert as delivered (sets `printDate`) |
 | `manager` | `listSalesInformation(criteria)` | `/Json/ManagerApp/ListSalesInformation/` | Aggregated revenue |
@@ -74,3 +75,46 @@ combination of:
 
 Returned entries get the relevant fields populated; absent fields are
 `null`.
+
+## Discovering whether an endpoint exists
+
+The service tells you, without credentials, whether a path is real:
+
+```bash
+curl -s -X POST https://wsdlspacemagic.recreatex.be/Json/<Namespace>/<Method>/ \
+     -H 'Content-Type: application/json' -d '{}'
+```
+
+- **Exists** → HTTP 200 + `{"succes":false,"message":"The Web.Config does not
+  contain a definition of 'ShopId'"}` (it got far enough to want a Context).
+- **Does not exist** → HTTP 404 + a `Nancy.ErrorHandling.DefaultStatusCodeHandler`
+  body.
+
+Sending a real `Context` with a wrong password yields `"Invalid WSDL password"`,
+so the password cannot be side-stepped — only endpoint *existence* is
+discoverable this way.
+
+### Cards / wristbands — what does NOT exist
+
+Probed 2026-07-26. `General/FindPersonCards` is the **only** card-level
+endpoint. All of these 404:
+
+`General/FindCards`, `FindCard`, `GetCards`, `GetPersonCard`,
+`FindCustomerCards`, `FindCardTransactions`, `GetCardBalance`,
+`FindCardBalance`, `FindPersonCardTransactions`, `GetPersonCardBalance`,
+`FindPersonCardMovements`, `FindPersonCardHistory`, `FindWristbands`,
+`FindChips`, `FindLoyaltyCards`, `FindCredits`, `FindWallet`,
+`FindMoneyAccounts`, `ManagerApp/ListPersonCards`, `ManagerApp/ListCards`,
+and the entire `Access/` and `Cards/` namespaces.
+
+Also 404, when looking for "who is currently inside": `FindPresences`,
+`FindPassages`, `FindAccessLogs`, `FindScans`, `FindCheckIns`,
+`FindZoneOccupants`, `FindAccessZoneVisitors`, `GetActiveVisitors`,
+`FindPresentVisitors`, `FindOpenSales`.
+
+**Consequence:** live occupancy (`FindAccessZones().occupancy.visitorsCurrent`)
+is a bare counter. The JSON service offers no way to resolve it into the list
+of individual wristbands behind it.
+
+One further endpoint exists but is not wrapped yet:
+`Subscriptions/FindSubscriptions`.

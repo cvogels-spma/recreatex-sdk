@@ -28,6 +28,8 @@ import type {
   FindSalesCriteria,
   GiftCertificate,
   FindGiftCertificatesCriteria,
+  PersonCard,
+  FindPersonCardsCriteria,
 } from '../types/general.js';
 import type { Basket, BasketItem, CheckoutResponse } from '../types/basket.js';
 import { dayRangeDotted } from '../helpers/dates.js';
@@ -80,6 +82,14 @@ interface FindSalesResponse {
 interface FindGiftCertificatesResponse {
   findGiftCertificatesResult?: { giftCertificates?: GiftCertificate[] };
   giftCertificates?: GiftCertificate[];
+  succes?: boolean;
+  message?: string;
+}
+
+interface FindPersonCardsResponse {
+  findPersonCardsResult?: { personCards?: PersonCard[] };
+  personCards?: PersonCard[];
+  cards?: PersonCard[];
   succes?: boolean;
   message?: string;
 }
@@ -325,6 +335,50 @@ export class GeneralModule {
       data.giftCertificates ??
       []
     );
+  }
+
+  /**
+   * Look up cards (RFID wristbands, subscription cards, voucher cards).
+   *
+   * This is the only card-level endpoint the JSON service exposes — probing
+   * confirmed that `FindCards`, `GetCards`, `FindCustomerCards`,
+   * `FindCardTransactions`, `GetCardBalance` and the whole `Access/` and
+   * `Cards/` namespaces all 404. If you need per-wristband data, it comes
+   * from here or not at all.
+   *
+   * ⚠ The response shape is not yet verified against an authenticated call —
+   * see the caveat on {@link PersonCard}. Treat the result as
+   * shape-tolerant and log `[extra]` fields the first time you run it.
+   *
+   * ⚠ This does NOT enumerate "currently inside the park". Live occupancy is
+   * a counter on the access zone (`findAccessZones().occupancy`), and the
+   * JSON service exposes no endpoint that maps that count back to the
+   * individual bands behind it.
+   *
+   * @example
+   *   const cards = await client.general.findPersonCards({ number: '1234' });
+   */
+  async findPersonCards(
+    criteria: FindPersonCardsCriteria = {},
+    callOpts?: CallOptions,
+  ): Promise<PersonCard[]> {
+    const Criteria: Record<string, unknown> = {
+      Paging: {
+        PageIndex: criteria.pageIndex ?? 0,
+        PageSize: criteria.pageSize ?? 50,
+      },
+    };
+    if (criteria.id) Criteria.Id = criteria.id;
+    if (criteria.number) Criteria.Number = criteria.number;
+    if (criteria.personId) Criteria.PersonId = criteria.personId;
+    if (criteria.customerId) Criteria.CustomerId = criteria.customerId;
+
+    const data = await this.client.post<FindPersonCardsResponse>(
+      'Json/General/FindPersonCards',
+      { Criteria },
+      callOpts ?? {},
+    );
+    return data.findPersonCardsResult?.personCards ?? data.personCards ?? data.cards ?? [];
   }
 
   /**

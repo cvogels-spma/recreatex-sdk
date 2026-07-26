@@ -174,6 +174,30 @@ describe('GeneralModule', () => {
     expect(certs[0]?.id).toBe('gc-2');
   });
 
+  it('findPersonCards sends paging + filters and reads the nested result', async () => {
+    const { fetch, calls } = fetchSpy({
+      findPersonCardsResult: { personCards: [{ id: 'pc-1', number: '00123', balance: 4.5 }] },
+    });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const cards = await rx.general.findPersonCards({ number: '00123', pageSize: 10 });
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.balance).toBe(4.5);
+    const body = calls[0]?.body as { Criteria?: Record<string, unknown> } | null;
+    expect(body?.Criteria?.Number).toBe('00123');
+    expect(body?.Criteria?.Paging).toMatchObject({ PageIndex: 0, PageSize: 10 });
+    expect(calls[0]?.url).toMatch(/Json\/General\/FindPersonCards\/$/);
+  });
+
+  it('findPersonCards falls back to flat `personCards` / `cards` fields', async () => {
+    const flat = fetchSpy({ personCards: [{ id: 'pc-2' }] });
+    const rx1 = new ReCreateXClient({ ...baseConfig, fetch: flat.fetch });
+    expect((await rx1.general.findPersonCards())[0]?.id).toBe('pc-2');
+
+    const alt = fetchSpy({ cards: [{ id: 'pc-3' }] });
+    const rx2 = new ReCreateXClient({ ...baseConfig, fetch: alt.fetch });
+    expect((await rx2.general.findPersonCards())[0]?.id).toBe('pc-3');
+  });
+
   it('setGiftCertificatePrinted sends Criteria.Id and resolves', async () => {
     const { fetch, calls } = fetchSpy({});
     const rx = new ReCreateXClient({ ...baseConfig, fetch });

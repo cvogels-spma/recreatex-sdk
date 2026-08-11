@@ -56,6 +56,62 @@ describe('ExpositionsModule', () => {
     expect(n).toBe(2);
   });
 
+  // ⚠⚠ Regression guard, 2026-08-11. `listPeriods` sent no `Paging` criterion and
+  // therefore returned only the first TEN periods of the range -- silently, with no
+  // error and no total count to notice it by. Space Magic's entry checkout matches a
+  // guest's time slot against this list: for 2026-08-11 the API holds 17 periods
+  // (10:00-18:00), unpaginated it stopped at 14:30, and every later booking was
+  // rejected with "no period starting 15:00" and fell back to an article sale --
+  // guests ended up with a sale but no OrganisedVisit, so their QR does not open the
+  // till. The operator was told to create backoffice periods that existed all along.
+  it('listPeriods sends Paging and auto-paginates past the silent cap of ten', async () => {
+    const mkPeriod = (i: number) => ({
+      id: `p${i}`,
+      from: `2026-08-11T${String(10 + i).padStart(2, '0')}:00:00`,
+      until: `2026-08-11T${String(11 + i).padStart(2, '0')}:00:00`,
+    });
+    const pages = [
+      Array.from({ length: 200 }, (_, i) => mkPeriod(i)),
+      Array.from({ length: 17 }, (_, i) => mkPeriod(200 + i)),
+    ];
+    const bodies: unknown[] = [];
+    let n = 0;
+    const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      bodies.push(init?.body ? JSON.parse(init.body as string) : null);
+      const page = pages[n++] ?? [];
+      return new Response(JSON.stringify({ expositionPeriods: page }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const all = await rx.expositions.listPeriods(
+      'exp-1',
+      '2026-08-11T00:00:00',
+      '2026-08-11T23:59:59',
+    );
+    expect(all).toHaveLength(217);
+    expect(n).toBe(2);
+    // Every request must carry Paging -- that is the whole point.
+    for (const body of bodies) {
+      const criteria = (body as { SearchCriteria?: { Paging?: unknown } } | null)?.SearchCriteria;
+      expect(criteria?.Paging).toBeDefined();
+    }
+    const first = (bodies[0] as { SearchCriteria?: { Paging?: { PageIndex?: number } } }).SearchCriteria;
+    const second = (bodies[1] as { SearchCriteria?: { Paging?: { PageIndex?: number } } }).SearchCriteria;
+    expect(first?.Paging?.PageIndex).toBe(0);
+    expect(second?.Paging?.PageIndex).toBe(1);
+  });
+
+  it('listPeriodsPage carries the range and a default page size', async () => {
+    const { fetch, calls } = fetchSpy({ expositionPeriods: [] });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    await rx.expositions.listPeriodsPage('exp-1', '2026-08-11T00:00:00', '2026-08-11T23:59:59');
+    const c = (calls[0]?.body as {
+      SearchCriteria?: { From?: string; Until?: string; Paging?: { PageSize?: number } };
+    } | null)?.SearchCriteria;
+    expect(c?.From).toBe('2026-08-11T00:00:00');
+    expect(c?.Until).toBe('2026-08-11T23:59:59');
+    expect(c?.Paging?.PageSize).toBe(200);
+  });
+
   it('findOrganisedVisits sends correct date format (dotted)', async () => {
     const { fetch, calls } = fetchSpy({ organisedVisits: [] });
     const rx = new ReCreateXClient({ ...baseConfig, fetch });

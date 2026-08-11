@@ -173,9 +173,22 @@ export class ExpositionsModule {
    *  build a checkout basket — `findOverviewByDay` does not include
    *  the period id.
    *
+   *  ⚠⚠ **Auto-paginated since 2026-08-11, and that is a bug fix, not a feature.**
+   *  This method used to send no `Paging` criterion and therefore returned only the
+   *  first **ten** periods of the range — silently. See {@link listPeriodsPage} for
+   *  what that cost. Callers keep their existing signature and simply get the whole
+   *  day now.
+   *
    * @param expositionId — the Exposition GUID.
    * @param fromIso — ISO datetime, e.g. `'2026-05-07T00:00:00'`.
    * @param untilIso — ISO datetime, e.g. `'2026-05-07T23:59:59'`.
+   * @param callOpts — per-call transport options (timeout, retry, signal).
+   * @param paginateOpts — page size / hard page cap. ⚠ Deliberately the **fifth**
+   *   parameter rather than the fourth, unlike {@link findOrganisedVisits}:
+   *   `CallOptions` and `PaginateOptions` both carry `signal`, so swapping their
+   *   positions would let an existing `callOpts` argument slide into the paging slot
+   *   and lose its timeout **without any type error**. Consistency is not worth a
+   *   silent breakage.
    *
    * @example
    *   const periods = await client.expositions.listPeriods(
@@ -190,11 +203,59 @@ export class ExpositionsModule {
     fromIso: string,
     untilIso: string,
     callOpts?: CallOptions,
+    paginateOpts: PaginateOptions = {},
+  ): Promise<ExpositionPeriodRef[]> {
+    const pageOptions: PaginateOptions = { pageSize: 200, ...paginateOpts };
+    return paginate(
+      ({ pageIndex, pageSize }) =>
+        this.listPeriodsPage(
+          expositionId,
+          fromIso,
+          untilIso,
+          { PageIndex: pageIndex, PageSize: pageSize },
+          callOpts,
+        ),
+      pageOptions,
+    );
+  }
+
+  /**
+   * One page of Period entries.
+   *
+   * ⚠⚠ **`Paging` IS NOT OPTIONAL HERE — measured 2026-08-11.** Without a `Paging`
+   * criterion `ListExpositionPeriods` silently returns only the **first ten**
+   * periods of the range. It does not error, it does not say the result was cut,
+   * and there is no total count in the response to notice it by.
+   *
+   * That cost real money. Space Magic's entry checkout resolves the guest's time
+   * slot by matching `from` against this list. For 2026-08-11 the API holds **17**
+   * periods (10:00 through 18:00); unpaginated it returned ten, ending at 14:30.
+   * Every booking for a later slot was rejected with *"kein Zeitfenster mit Beginn
+   * 15:00"* and fell back to a plain article sale — so those guests got a sale
+   * without an `OrganisedVisit`, and their QR code does not open the till. The
+   * operator was told to create the missing backoffice periods; they existed all
+   * along.
+   *
+   * ⭐ The lesson generalises to this whole API: **a short answer is not a fact
+   * about the data until you have checked that you asked for all of it.** Silent
+   * caps look exactly like "nothing there". The number `10` is the tell.
+   */
+  async listPeriodsPage(
+    expositionId: string,
+    fromIso: string,
+    untilIso: string,
+    paging?: { PageIndex: number; PageSize: number },
+    callOpts?: CallOptions,
   ): Promise<ExpositionPeriodRef[]> {
     const data = await this.client.post<ListExpositionPeriodsResponse>(
       'Json/Expositions/ListExpositionPeriods',
       {
-        SearchCriteria: { ExpositionId: expositionId, From: fromIso, Until: untilIso },
+        SearchCriteria: {
+          ExpositionId: expositionId,
+          From: fromIso,
+          Until: untilIso,
+          Paging: paging ?? { PageIndex: 0, PageSize: 200 },
+        },
       },
       callOpts ?? {},
     );

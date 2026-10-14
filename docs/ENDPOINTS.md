@@ -27,7 +27,8 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `general` | `getPointOfSales()` | `/Json/General/GetPointOfSales/` | POS terminals |
 | `general` | `listPaymentMethods()` | `/Json/General/ListPaymentMethods/` | 32 payment methods |
 | `general` | `findPerson(criteria)` | `/Json/General/FindPerson/` | Person lookup |
-| `general` | `findSales(criteria)` | `/Json/General/FindSales/` | Low-level transactions |
+| `general` | `findSales(criteria, callOpts?, paginateOpts?)` | `/Json/General/FindSales/` | All bons of the window, paginated (500/page; throws at the page cap). Check-in, Nachzahlautomat, Drehkreuz, Backoffice, Nachrutsche; NOT the F&B tills or the QR order app |
+| `general` | `findSalesPage(criteria, paging, callOpts?)` | `/Json/General/FindSales/` | One page; `Paging` goes inside `Criteria` |
 | `general` | `reCalculateBasket(basket)` | `/Json/General/ReCalculateBasket/` | Basket totals |
 | `general` | `lockBasketItems(items)` | `/Json/General/LockBasketItems/` | Reserve items for payment |
 | `general` | `checkoutBasket(basket)` | `/Json/General/CheckoutBasket/` | Finalise sale |

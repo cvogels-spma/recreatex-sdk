@@ -193,6 +193,12 @@ export interface FindSalesCriteria {
   divisionId?: string;
 }
 
+/** One page of `General/FindSales` (zero-based index). */
+export interface FindSalesPaging {
+  PageIndex: number;
+  PageSize: number;
+}
+
 // ---- Person cards (RFID wristbands, subscription & voucher cards) --------
 
 /**

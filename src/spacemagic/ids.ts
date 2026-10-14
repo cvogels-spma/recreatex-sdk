@@ -23,6 +23,19 @@ export const DIVISION_IDS = {
  */
 export const GUEST_CUSTOMER_ID = '119d9f06-66ad-ef11-9595-9a21964517de';
 
+/**
+ * The anonymous walk-in customer the park tills book onto ("Laufkundschaft").
+ * Measured 2026-10-08: 32,997 of 42,742 check-in bons since the opening carry this id,
+ * 7,424 carry {@link GUEST_CUSTOMER_ID} (pre-booked online), the rest a named person.
+ * A sale on either of the two cannot be tied to a household.
+ */
+export const WALK_IN_CUSTOMER_ID = '032a299f-45ea-4144-ad66-93b965b37f0b';
+
+/** True for the two anonymous customers (or a missing customer). */
+export function isAnonymousCustomer(customerId: string | null | undefined): boolean {
+  return !customerId || customerId === GUEST_CUSTOMER_ID || customerId === WALK_IN_CUSTOMER_ID;
+}
+
 /** AccessZone for the whole park. `maxVisitors` ≈ 900. */
 export const SPACE_MAGIC_ZONE_ID = 'f2bd4439-52ab-ef11-9595-9a21964517de';
 

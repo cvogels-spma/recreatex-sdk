@@ -122,6 +122,66 @@ describe('ExpositionsModule', () => {
   });
 });
 
+describe('GeneralModule.findSales', () => {
+  // ⚠⚠ Regression guard, 2026-10-14. `findSales` sent no `Paging` criterion and returned
+  // only the latest TEN bons of the window: on 2026-10-04 (187 bons, 334 guests) it
+  // answered with 10, and the old notes concluded "FindSales only covers some tills".
+  const mkSale = (i: number) => ({ id: `s${i}`, date: '2026-10-04T10:00:00', lines: [] });
+
+  function pagedFetch(sizes: number[]) {
+    const bodies: Array<{ Criteria?: { From?: string; Paging?: { PageIndex?: number; PageSize?: number } } }> = [];
+    let n = 0;
+    let offset = 0;
+    const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      bodies.push(init?.body ? JSON.parse(init.body as string) : {});
+      const size = sizes[n++] ?? 0;
+      const page = Array.from({ length: size }, (_, i) => mkSale(offset + i));
+      offset += size;
+      return new Response(JSON.stringify({ sales: page }), { status: 200 });
+    }) as unknown as typeof fetch;
+    return { fetch, bodies, calls: () => n };
+  }
+
+  it('sends Paging INSIDE Criteria and paginates past the silent cap of ten', async () => {
+    const { fetch, bodies, calls } = pagedFetch([500, 187]);
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const all = await rx.general.findSales({ from: '2026-10-04 00:00:00.000', until: '2026-10-04 23:59:59.000' });
+    expect(all).toHaveLength(687);
+    expect(calls()).toBe(2);
+    expect(bodies[0]?.Criteria?.Paging).toEqual({ PageIndex: 0, PageSize: 500 });
+    expect(bodies[1]?.Criteria?.Paging).toEqual({ PageIndex: 1, PageSize: 500 });
+    expect(bodies[0]?.Criteria?.From).toBe('2026-10-04 00:00:00.000');
+    // Counter-proof: a top-level Paging (or none) is what returned ten bons.
+    expect((bodies[0] as Record<string, unknown>).Paging).toBeUndefined();
+  });
+
+  it('throws when the page cap is reached with a full last page', async () => {
+    const { fetch } = pagedFetch([2, 2, 2]);
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    await expect(
+      rx.general.findSales({ from: 'a', until: 'b' }, undefined, { pageSize: 2, maxPages: 2 }),
+    ).rejects.toThrow(/page cap reached/);
+  });
+
+  it('does not throw when the last allowed page is partial', async () => {
+    const { fetch } = pagedFetch([2, 1]);
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const all = await rx.general.findSales({ from: 'a', until: 'b' }, undefined, { pageSize: 2, maxPages: 2 });
+    expect(all).toHaveLength(3);
+  });
+
+  it('findSalesPage passes terminal and division filters next to Paging', async () => {
+    const { fetch, calls } = fetchSpy({ sales: [] });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    await rx.general.findSalesPage(
+      { from: 'a', until: 'b', pointOfSaleId: 'pos-1', divisionId: 'div-1' },
+      { PageIndex: 3, PageSize: 50 },
+    );
+    const c = (calls[0]?.body as { Criteria?: Record<string, unknown> } | null)?.Criteria;
+    expect(c).toMatchObject({ PointOfSaleId: 'pos-1', DivisionId: 'div-1', Paging: { PageIndex: 3, PageSize: 50 } });
+  });
+});
+
 describe('GeneralModule', () => {
   it('findAccessZones reads `accessZones` (live API field name)', async () => {
     const { fetch } = fetchSpy({ accessZones: [{ id: 'z1', code: 'X', name: 'X', number: 1 }] });

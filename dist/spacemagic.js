@@ -9,6 +9,10 @@ var DIVISION_IDS = {
   administration: "88791f99-1148-4129-b2d7-592aa0cb6847"
 };
 var GUEST_CUSTOMER_ID = "119d9f06-66ad-ef11-9595-9a21964517de";
+var WALK_IN_CUSTOMER_ID = "032a299f-45ea-4144-ad66-93b965b37f0b";
+function isAnonymousCustomer(customerId) {
+  return !customerId || customerId === GUEST_CUSTOMER_ID || customerId === WALK_IN_CUSTOMER_ID;
+}
 var SPACE_MAGIC_ZONE_ID = "f2bd4439-52ab-ef11-9595-9a21964517de";
 var PAYMENT_METHOD_ID_KARTENZAHLUNG = "a0d0dc4c-1f18-ea11-a2d2-8fcb7a700801";
 
@@ -309,6 +313,77 @@ function buildBirthdayBasket(input) {
   };
 }
 
-export { DIVISION_IDS, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, mapBirthdayBooking, mapEscapeBooking };
+// src/core/helpers/sales.ts
+function dedupSaleLines(sale) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const line of sale.lines ?? []) {
+    const id = typeof line.id === "string" ? line.id : "";
+    if (id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+// src/spacemagic/wristbands.ts
+var WRISTBAND_LINES = {
+  "Hauskredit Kinder": "kids",
+  "Hauskredit Erwachsene": "adults",
+  "Geburtstags Wallet": "birthday"
+};
+var PASS_ARTICLE_PATTERN = /jahreskarte|zehnerkarte|saisonkarte|mehrfachkarte|\bpass\b|\babo\b/i;
+function saleHour(date) {
+  const m = /T(\d{2}):/.exec(date ?? "");
+  if (!m) return null;
+  const h = Number(m[1]);
+  return h >= 0 && h < 24 ? h : null;
+}
+function countWristbands(sales) {
+  const raw = { kids: 0, adults: 0, birthday: 0 };
+  const hours = new Array(24).fill(0);
+  let checkinSales = 0;
+  let passAnon = 0;
+  let passNamed = 0;
+  for (const sale of sales) {
+    let persons = 0;
+    for (const line of dedupSaleLines(sale)) {
+      const name = (line.description ?? "").trim();
+      const qty = Number(line.quantity) || 0;
+      const bucket = WRISTBAND_LINES[name];
+      if (bucket) {
+        raw[bucket] += qty;
+        persons += qty;
+        continue;
+      }
+      if (qty > 0 && (Number(line.totalPrice) || 0) > 0 && PASS_ARTICLE_PATTERN.test(name)) {
+        if (isAnonymousCustomer(sale.customerId)) passAnon += qty;
+        else passNamed += qty;
+      }
+    }
+    if (persons > 0) {
+      checkinSales++;
+      const h = saleHour(sale.date);
+      if (h !== null) hours[h] += persons;
+    }
+  }
+  const kids = Math.round(raw.kids);
+  const adults = Math.round(raw.adults);
+  const birthday = Math.round(raw.birthday);
+  return {
+    wristbands: Math.round(raw.kids + raw.adults + raw.birthday),
+    kids,
+    adults,
+    birthday,
+    checkinSales,
+    byHour: hours.map((x) => Math.round(x)),
+    passSalesAnonymous: Math.round(passAnon),
+    passSalesNamed: Math.round(passNamed)
+  };
+}
+
+export { DIVISION_IDS, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PASS_ARTICLE_PATTERN, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, WALK_IN_CUSTOMER_ID, WRISTBAND_LINES, buildBirthdayBasket, categorizeVisit, classifyVoucher, countWristbands, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isAnonymousCustomer, isGastroGroup, mapBirthdayBooking, mapEscapeBooking, saleHour };
 //# sourceMappingURL=spacemagic.js.map
 //# sourceMappingURL=spacemagic.js.map

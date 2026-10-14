@@ -1,4 +1,4 @@
-import { e as OrganisedVisit, t as OrganisedVisitArticle, u as OrganisedVisitPeriodReservation, B as Basket } from './basket--qI8o_rw.js';
+import { e as OrganisedVisit, Q as OrganisedVisitArticle, T as OrganisedVisitPeriodReservation, B as Basket, S as Sale } from './basket-DtlswspG.js';
 
 /**
  * Space Magic-specific GUIDs and constants.
@@ -21,6 +21,15 @@ declare const DIVISION_IDS: {
  * `MissingCustomer`.
  */
 declare const GUEST_CUSTOMER_ID = "119d9f06-66ad-ef11-9595-9a21964517de";
+/**
+ * The anonymous walk-in customer the park tills book onto ("Laufkundschaft").
+ * Measured 2026-10-08: 32,997 of 42,742 check-in bons since the opening carry this id,
+ * 7,424 carry {@link GUEST_CUSTOMER_ID} (pre-booked online), the rest a named person.
+ * A sale on either of the two cannot be tied to a household.
+ */
+declare const WALK_IN_CUSTOMER_ID = "032a299f-45ea-4144-ad66-93b965b37f0b";
+/** True for the two anonymous customers (or a missing customer). */
+declare function isAnonymousCustomer(customerId: string | null | undefined): boolean;
 /** AccessZone for the whole park. `maxVisitors` ≈ 900. */
 declare const SPACE_MAGIC_ZONE_ID = "f2bd4439-52ab-ef11-9595-9a21964517de";
 /** Confirmed-working PaymentMethodId for "KARTENZAHLUNG" (use for any
@@ -291,4 +300,58 @@ interface BirthdayCheckoutResult {
     balanceRemaining: number;
 }
 
-export { type BirthdayBookingInput, type BirthdayCheckoutResult, type BirthdayExtraArticle, type BirthdayPriceTier, type BookingRow, DIVISION_IDS, type EscapeRow, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, type VisitCategory, type VoucherDeliveryType, type VoucherSku, buildBirthdayBasket, categorizeVisit, classifyVoucher, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isGastroGroup, mapBirthdayBooking, mapEscapeBooking };
+/**
+ * Counting park entries from the check-in bons.
+ *
+ * Every check-in bon carries exactly ONE wallet line per wristband handed out:
+ * "Hauskredit Kinder", "Hauskredit Erwachsene" or "Geburtstags Wallet". Their sum is the
+ * number of people checked in, the bon time is the time of entry.
+ *
+ * Verified 2026-10-08 against the Gantner access counter: 337 wristbands vs. 334 counted on
+ * 2026-10-04; from June 2025 on every month shows a stable 2.0 to 2.3 Gantner scans per
+ * wristband. The counter value the dashboard stored per day (`daily_kpi.visitors`) covered
+ * only 36 to 44 % of the entries from June to October 2025, which is why the closed-day value
+ * comes from here.
+ *
+ * ⚠ The line names are the convention of the Space Magic tills, not an API field. If the
+ * till articles get renamed, `wristbands` drops to zero; callers must treat 0 on a day with
+ * check-in bons as "convention changed", never as "nobody came".
+ *
+ * ⚠ "Kinder"/"Erwachsene" is the LINE TYPE, not the age: in 2025 the tills booked most
+ * children as "Hauskredit Erwachsene". Only the total is reliable over the whole history.
+ */
+
+/** Wallet line → bucket. One line per wristband. */
+declare const WRISTBAND_LINES: Readonly<Record<string, 'kids' | 'adults' | 'birthday'>>;
+/**
+ * Articles that are a pass or a multi-visit card (annual pass, ten-visit card, season pass,
+ * subscription). Their use can only be measured when they are sold to a NAMED customer.
+ */
+declare const PASS_ARTICLE_PATTERN: RegExp;
+interface WristbandCount {
+    /** People checked in (sum of the wallet lines, rounded once at the end). */
+    wristbands: number;
+    kids: number;
+    adults: number;
+    birthday: number;
+    /** Bons with at least one wallet line (≈ groups/families at the till). */
+    checkinSales: number;
+    /** Entries per hour of the bon time (local park time), 24 slots. */
+    byHour: number[];
+    /** Pass / multi-visit card units sold to the anonymous customers (usage not traceable). */
+    passSalesAnonymous: number;
+    /** Pass / multi-visit card units sold to a named customer. */
+    passSalesNamed: number;
+}
+/** Hour of a Recreatex bon timestamp (`2026-10-04T18:52:38`, park-local), or null. */
+declare function saleHour(date: string | undefined | null): number | null;
+/**
+ * Count entries (wristbands) and pass sales over a list of bons.
+ *
+ * Lines are deduplicated per bon first. Quantities are summed raw and rounded once per
+ * bucket: a handful of lines carry fractional quantities (seen on "Geburtstags Wallet"),
+ * and rounding per line would drift.
+ */
+declare function countWristbands(sales: readonly Sale[]): WristbandCount;
+
+export { type BirthdayBookingInput, type BirthdayCheckoutResult, type BirthdayExtraArticle, type BirthdayPriceTier, type BookingRow, DIVISION_IDS, type EscapeRow, GASTRO_GROUP_MAP, GUEST_CUSTOMER_ID, PASS_ARTICLE_PATTERN, PAYMENT_METHOD_ID_KARTENZAHLUNG, SHOP_ID, SPACE_MAGIC_ZONE_ID, VOUCHER_SKUS, type VisitCategory, type VoucherDeliveryType, type VoucherSku, WALK_IN_CUSTOMER_ID, WRISTBAND_LINES, type WristbandCount, buildBirthdayBasket, categorizeVisit, classifyVoucher, countWristbands, extractEssen, extractKind, extractKontakt, extractPaket, findVoucher, gastroGroupName, isAnonymousCustomer, isGastroGroup, mapBirthdayBooking, mapEscapeBooking, saleHour };

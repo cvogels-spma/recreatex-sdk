@@ -8,6 +8,7 @@
  *  - {@link GASTRO_GROUP_MAP} / {@link gastroGroupName}
  *  - Visit-categorisation + extraction helpers
  *  - {@link mapBirthdayBooking}, {@link mapEscapeBooking}
+ *  - {@link countWristbands}: park entries from the check-in bons
  */
 
 export * from './ids.js';
@@ -15,3 +16,4 @@ export * from './vouchers.js';
 export * from './gastro.js';
 export * from './visits/index.js';
 export * from './birthday.js';
+export * from './wristbands.js';

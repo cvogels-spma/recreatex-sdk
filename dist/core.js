@@ -554,11 +554,18 @@ var GeneralModule = class {
     );
     return data.persons ?? data.result?.persons ?? [];
   }
-  /** Low-level sales (only Nachzahlautomat / Checkins, not all POS). */
-  async findSales(criteria, callOpts) {
+  /**
+   * One page of `General/FindSales`.
+   *
+   * ⚠ The `Paging` object belongs INSIDE `Criteria`. Sent at the top level it is ignored,
+   * and so is a request without it: either way Recreatex answers with its silent default of
+   * TEN bons (the most recent ones of the window). Use {@link findSales} unless you stream.
+   */
+  async findSalesPage(criteria, paging, callOpts) {
     const Criteria = {
       From: criteria.from,
-      Until: criteria.until
+      Until: criteria.until,
+      Paging: paging
     };
     if (criteria.pointOfSaleId) Criteria.PointOfSaleId = criteria.pointOfSaleId;
     if (criteria.divisionId) Criteria.DivisionId = criteria.divisionId;
@@ -568,6 +575,45 @@ var GeneralModule = class {
       callOpts ?? {}
     );
     return data.sales ?? [];
+  }
+  /**
+   * All bons of the window, paginated to completion.
+   *
+   * ⚠⚠ Regression guard, 2026-10-14. Up to v0.2.0 this method sent no `Paging` criterion and
+   * returned only the latest TEN bons of the window, silently: on a Sunday with 187 bons and
+   * 334 guests it answered with 10. That is where the old note "FindSales only returns a
+   * subset (Nachzahlautomat, Checkins)" came from. With paging it returns every bon of the
+   * check-in, Nachzahlautomat, Drehkreuz, Backoffice and Nachrutsche terminals. The F&B tills
+   * and the QR order app are still NOT part of this endpoint (verified 2026-10-08 over 586
+   * days); use `ManagerApp/ListSalesInformation` per article group for complete revenue.
+   *
+   * ⚠ Lines still come duplicated: run each bon through {@link dedupSaleLines}.
+   *
+   * ⚠ Reaching `maxPages` with a full last page THROWS instead of returning a truncated list.
+   * A cut-off sales list looks exactly like a quiet day.
+   *
+   * @param paginateOpts page size (default 500) and hard page cap (default 200, i.e.
+   *   100,000 bons). Fifth-parameter rule as in `listPeriods`: `CallOptions` and
+   *   `PaginateOptions` both carry `signal`, so they are never swapped.
+   */
+  async findSales(criteria, callOpts, paginateOpts = {}) {
+    const pageSize = paginateOpts.pageSize ?? 500;
+    const maxPages = paginateOpts.maxPages ?? 200;
+    let lastPageFull = false;
+    const all = await paginate(
+      async ({ pageIndex, pageSize: size }) => {
+        const page = await this.findSalesPage(criteria, { PageIndex: pageIndex, PageSize: size }, callOpts);
+        lastPageFull = page.length >= size;
+        return page;
+      },
+      { ...paginateOpts, pageSize, maxPages }
+    );
+    if (lastPageFull && all.length >= pageSize * maxPages) {
+      throw new Error(
+        `FindSales: page cap reached (${maxPages} x ${pageSize} bons) for ${criteria.from} to ${criteria.until}; narrow the window or raise paginateOpts.maxPages`
+      );
+    }
+    return all;
   }
   // ---- Basket flow -------------------------------------------------------
   /** Recalculate prices, discounts, VAT for a basket without committing. */
@@ -952,6 +998,21 @@ var BasketTypeStrings = {
   CouponCodeDiscount: `${BCT}.CouponCodeDiscount${SUFFIX}`
 };
 
-export { ArticlesModule, BasketTypeStrings, DocumentsModule, ExpositionsModule, GeneralModule, ManagerModule, ReCreateXClient, RecreatexApiError, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, STABLE_SESSION_ID, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+// src/core/helpers/sales.ts
+function dedupSaleLines(sale) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const line of sale.lines ?? []) {
+    const id = typeof line.id === "string" ? line.id : "";
+    if (id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+export { ArticlesModule, BasketTypeStrings, DocumentsModule, ExpositionsModule, GeneralModule, ManagerModule, ReCreateXClient, RecreatexApiError, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, STABLE_SESSION_ID, buildContext, dayRangeDotted, dayRangeIso, dedupSaleLines, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
 //# sourceMappingURL=core.js.map
 //# sourceMappingURL=core.js.map

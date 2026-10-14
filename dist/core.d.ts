@@ -1,5 +1,5 @@
-import { O as OrganisedVisitTicketAdjustment, a as OrganisedVisitSaleAdjustment, E as Exposition, b as ExpositionPeriodDate, Y as Ymd, c as ExpositionDayOverview, d as ExpositionPeriodRef, F as FindOrganisedVisitsCriteria, e as OrganisedVisit, f as OrganisedVisitPeriodTransfer, R as RecreatexDateTime, B as Basket, g as BasketItem, C as CheckoutResponse, h as RecreatexContext, i as RecreatexEnvelope } from './basket--qI8o_rw.js';
-export { A as AnonymousPerson, j as ArticleSaleItem, k as BasketPayment, l as BasketTypeString, m as BasketTypeStrings, n as BasketValidationResult, o as CheckoutResult, p as ExpositionPeriod, q as ExpositionPeriodPrice, r as ExpositionPeriodReservationEntry, s as ExpositionPeriodReservationItem, t as OrganisedVisitArticle, u as OrganisedVisitPeriodReservation, v as OrganisedVisitPerson, w as OrganisedVisitPersonAddress, x as OrganisedVisitRebookingItem, y as OrganisedVisitSaleGuest, z as OrganisedVisitSaleInfo, P as Paging } from './basket--qI8o_rw.js';
+import { O as OrganisedVisitTicketAdjustment, a as OrganisedVisitSaleAdjustment, E as Exposition, b as ExpositionPeriodDate, Y as Ymd, c as ExpositionDayOverview, d as ExpositionPeriodRef, F as FindOrganisedVisitsCriteria, e as OrganisedVisit, f as OrganisedVisitPeriodTransfer, g as FindAccessZonesCriteria, A as AccessZone, R as Reader, D as Division, P as PointOfSale, h as PaymentMethod, i as FindPersonCriteria, j as Person, k as FindSalesCriteria, l as FindSalesPaging, S as Sale, B as Basket, m as BasketItem, C as CheckoutResponse, n as FindGiftCertificatesCriteria, G as GiftCertificate, o as FindPersonCardsCriteria, p as PersonCard, q as RecreatexDateTime, r as RecreatexContext, s as RecreatexEnvelope, t as SaleLine } from './basket-DtlswspG.js';
+export { u as AccessZoneOccupancy, v as AccessZoneReader, w as AnonymousPerson, x as ArticleSaleItem, y as BasketPayment, z as BasketTypeString, H as BasketTypeStrings, I as BasketValidationResult, J as CheckoutResult, K as ExpositionPeriod, L as ExpositionPeriodPrice, M as ExpositionPeriodReservationEntry, N as ExpositionPeriodReservationItem, Q as OrganisedVisitArticle, T as OrganisedVisitPeriodReservation, U as OrganisedVisitPerson, V as OrganisedVisitPersonAddress, W as OrganisedVisitRebookingItem, X as OrganisedVisitSaleGuest, Z as OrganisedVisitSaleInfo, _ as Paging, $ as PersonAddress, a0 as PersonCredential, a1 as SalePaymentLine } from './basket-DtlswspG.js';
 
 /**
  * Retry helpers. Only network-level failures and 5xx HTTP errors are
@@ -306,254 +306,6 @@ declare class ExpositionsModule {
 }
 
 /**
- * General namespace — access zones, readers, divisions, persons, sales,
- * payment methods, point-of-sales, basket primitives.
- */
-
-interface AccessZoneOccupancy {
-    maxVisitors: number;
-    maxVisitorsPerDay: number;
-    /** Daily count — IGNORES OccupancyFrom/Until and always reflects "today". */
-    visitorsToday: number;
-    /** Currently inside the zone. */
-    visitorsCurrent: number;
-}
-interface AccessZoneReader {
-    id: string;
-    code?: string;
-    name?: string;
-    /** 0 = entrance, 1 = exit. */
-    type?: 0 | 1;
-}
-interface AccessZone {
-    id: string;
-    code: string;
-    name: string;
-    number: number;
-    occupancy?: AccessZoneOccupancy;
-    entranceReaders?: AccessZoneReader[];
-    exitReaders?: AccessZoneReader[];
-}
-interface FindAccessZonesCriteria {
-    id?: string | null;
-    /** Recreatex datetime window. SDK's `today: true` shortcut sets this for today (Berlin). */
-    occupancyFrom?: RecreatexDateTime;
-    occupancyUntil?: RecreatexDateTime;
-    includes?: {
-        entranceReaders?: boolean;
-        exitReaders?: boolean;
-        occupancy?: boolean;
-        inactiveZoneControl?: boolean;
-    };
-}
-interface Reader {
-    id: string;
-    code?: string;
-    name?: string;
-    number?: number;
-    type?: number;
-    [extra: string]: unknown;
-}
-interface Division {
-    id: string;
-    code?: string;
-    name?: string;
-    address?: string;
-    [extra: string]: unknown;
-}
-interface PointOfSale {
-    id: string;
-    code?: string;
-    name?: string;
-    [extra: string]: unknown;
-}
-interface PaymentMethod {
-    id: string;
-    code: string;
-    name: string;
-    /** Often a number: 0 = card, 1 = cash, etc. */
-    type?: number;
-    [extra: string]: unknown;
-}
-interface PersonCredential {
-    username?: string;
-    password?: string;
-}
-interface PersonAddress {
-    street?: string;
-    number?: string;
-    zipCode?: string;
-    town?: string;
-    countryDescription?: string;
-    telephone?: string;
-}
-interface Person {
-    id: string;
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    cellPhone?: string;
-    language?: string;
-    credential?: PersonCredential;
-    address?: PersonAddress;
-    birthDate?: string;
-    [extra: string]: unknown;
-}
-interface FindPersonCriteria {
-    id?: string;
-    email?: string;
-    firstName?: string;
-    lastName?: string;
-    username?: string;
-}
-/**
- * A single line on a FindSales bon.
- *
- * ⚠ **Recreatex returns duplicate line objects.** The same line comes back
- * repeatedly with an identical `id`, `sequenceNumber` and amount — the
- * repetition factor appears to follow the number of joined records upstream,
- * and it mainly hits lines carrying a `mainOrganisedVisitId` (booking-bound
- * articles such as "Ausstellung Vorauszahlung"). Verified 2026-07-26: a bon
- * holding ONE real 806 € line came back 8× = 6.448 €.
- *
- * **Always deduplicate by `id` before summing.** Summing `lines` raw inflates
- * revenue massively — on one production month it turned a reconciled
- * 200.237,10 € into 284.934,70 €.
- */
-interface SaleLine {
-    /** Line GUID. Duplicates share it — dedupe on this. */
-    id?: string;
-    /** Stable within the bon; duplicates share it too. */
-    sequenceNumber?: number;
-    articleId?: string;
-    description?: string;
-    /** Set on booking-bound lines; correlates with the duplication. */
-    mainOrganisedVisitId?: string;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-    [extra: string]: unknown;
-}
-interface SalePaymentLine {
-    paymentMethodId: string;
-    amount: number;
-    [extra: string]: unknown;
-}
-/**
- * A bon from `General/FindSales`.
- *
- * Field list verified against production on 2026-07-26: `$type`, `customerId`,
- * `date`, `divisonId`, `id`, `lines`, `number`, `paymentLines`,
- * `pointOfSaleId`, `salesSeriesId`.
- *
- * ⚠ Two traps:
- *  1. The timestamp is **`date`**, not `saleDate` — older versions of this
- *     type declared `saleDate` as required, which silently yielded `undefined`.
- *  2. There is **no card / wristband reference** on a bon. A bon cannot be
- *     traced back to the RFID band it was booked on through this API.
- *
- * See {@link SaleLine} for the line-duplication trap.
- */
-interface Sale {
-    id: string;
-    /** Bon timestamp, e.g. `"2025-08-06T09:52:30"`. THIS is the real field. */
-    date?: RecreatexDateTime;
-    /** @deprecated Not emitted by Recreatex — use {@link Sale.date}. */
-    saleDate?: RecreatexDateTime;
-    /** Human-readable bon number, e.g. `1000008439`. */
-    number?: number;
-    pointOfSaleId?: string;
-    /** Note the upstream typo — one `i`. */
-    divisonId?: string;
-    customerId?: string | null;
-    salesSeriesId?: string;
-    /** @deprecated Not emitted by Recreatex — sum the deduped {@link Sale.lines}. */
-    totalAmount?: number;
-    /** ⚠ Contains duplicates — dedupe by `id`. See {@link SaleLine}. */
-    lines?: SaleLine[];
-    paymentLines?: SalePaymentLine[];
-    [extra: string]: unknown;
-}
-interface FindSalesCriteria {
-    from: RecreatexDateTime;
-    until: RecreatexDateTime;
-    pointOfSaleId?: string;
-    divisionId?: string;
-}
-/**
- * A card record as returned by `General/FindPersonCards`.
- *
- * In a Gantner-driven park this is the entity behind a **physical RFID
- * wristband** as well as behind subscription and gift-certificate cards —
- * they all live in the same PersonCard table, distinguished by their type
- * and by whether a person is attached.
- *
- * Field list verified against production on 2026-07-27: `$type`, `id`,
- * `description`, `card`, `personId`, `person`.
- *
- * ⚠ **There is no balance field.** The stored value of an RFID wristband lives
- * in the Gantner purse and is not reachable through this API — no endpoint
- * exposes it (see `docs/ENDPOINTS.md`). Do not promise "remaining credit" to a
- * caller based on this record.
- *
- * ⚠ This endpoint also has no "currently open / checked in" filter, so it
- * cannot enumerate the bands still inside the park.
- */
-interface PersonCard {
-    id: string;
-    /** Card number as encoded on the wristband. */
-    card?: string | null;
-    /** Plain-text label of the card. */
-    description?: string | null;
-    /** Attached person, when the card is not anonymous. */
-    personId?: string | null;
-    person?: unknown;
-    /** Unmapped upstream fields. */
-    [extra: string]: unknown;
-}
-interface FindPersonCardsCriteria {
-    id?: string;
-    /** Card number as printed/encoded on the wristband. */
-    number?: string;
-    personId?: string;
-    customerId?: string;
-    pageIndex?: number;
-    pageSize?: number;
-}
-/**
- * A single gift-certificate record as returned by `FindGiftCertificates`.
- *
- * Heads-up: `number` is typically null for a freshly-created certificate
- * (the PersonCard isn't populated yet). The visible voucher code lives in
- * the DocumentService PDF — use this record only to discover the
- * GiftCertificate `id` (for `SetGiftCertificatePrinted`) or to match a
- * cert via `salesSeriesID` to a CheckoutBasket result.
- */
-interface GiftCertificate {
-    id: string;
-    number: string | null;
-    amount: number | null;
-    purchaseDate: string | null;
-    salesSeriesID: string | null;
-    shortName: string | null;
-    description: string | null;
-    ticketDescription: string | null;
-    extraDescription: string | null;
-    validFrom: string | null;
-    validTill: string | null;
-    /** ISO timestamp once SetGiftCertificatePrinted has fired; otherwise null. */
-    printDate: string | null;
-}
-interface FindGiftCertificatesCriteria {
-    /** Recreatex Person GUID — typically the customer who placed the order. */
-    customerId?: string;
-    id?: string;
-    number?: string;
-    pageIndex?: number;
-    pageSize?: number;
-}
-
-/**
  * General namespace.
  *
  * Endpoints:
@@ -563,7 +315,7 @@ interface FindGiftCertificatesCriteria {
  *  - `General/GetPointOfSales`     → POS terminals
  *  - `General/ListPaymentMethods`  → 32 payment methods
  *  - `General/FindPerson`          → look up person records
- *  - `General/FindSales`           → low-level transactions
+ *  - `General/FindSales`           → low-level transactions (paginated, see findSales)
  *  - `General/ReCalculateBasket`   → totals/discounts (web shop flow)
  *  - `General/LockBasketItems`     → reserve items (web shop flow)
  *  - `General/CheckoutBasket`      → finalise + create sale (web shop flow)
@@ -595,8 +347,35 @@ declare class GeneralModule {
     listPaymentMethods(callOpts?: CallOptions): Promise<PaymentMethod[]>;
     /** Look up persons. Provide at least one filter. */
     findPerson(criteria: FindPersonCriteria, callOpts?: CallOptions): Promise<Person[]>;
-    /** Low-level sales (only Nachzahlautomat / Checkins, not all POS). */
-    findSales(criteria: FindSalesCriteria, callOpts?: CallOptions): Promise<Sale[]>;
+    /**
+     * One page of `General/FindSales`.
+     *
+     * ⚠ The `Paging` object belongs INSIDE `Criteria`. Sent at the top level it is ignored,
+     * and so is a request without it: either way Recreatex answers with its silent default of
+     * TEN bons (the most recent ones of the window). Use {@link findSales} unless you stream.
+     */
+    findSalesPage(criteria: FindSalesCriteria, paging: FindSalesPaging, callOpts?: CallOptions): Promise<Sale[]>;
+    /**
+     * All bons of the window, paginated to completion.
+     *
+     * ⚠⚠ Regression guard, 2026-10-14. Up to v0.2.0 this method sent no `Paging` criterion and
+     * returned only the latest TEN bons of the window, silently: on a Sunday with 187 bons and
+     * 334 guests it answered with 10. That is where the old note "FindSales only returns a
+     * subset (Nachzahlautomat, Checkins)" came from. With paging it returns every bon of the
+     * check-in, Nachzahlautomat, Drehkreuz, Backoffice and Nachrutsche terminals. The F&B tills
+     * and the QR order app are still NOT part of this endpoint (verified 2026-10-08 over 586
+     * days); use `ManagerApp/ListSalesInformation` per article group for complete revenue.
+     *
+     * ⚠ Lines still come duplicated: run each bon through {@link dedupSaleLines}.
+     *
+     * ⚠ Reaching `maxPages` with a full last page THROWS instead of returning a truncated list.
+     * A cut-off sales list looks exactly like a quiet day.
+     *
+     * @param paginateOpts page size (default 500) and hard page cap (default 200, i.e.
+     *   100,000 bons). Fifth-parameter rule as in `listPeriods`: `CallOptions` and
+     *   `PaginateOptions` both carry `signal`, so they are never swapped.
+     */
+    findSales(criteria: FindSalesCriteria, callOpts?: CallOptions, paginateOpts?: PaginateOptions): Promise<Sale[]>;
     /** Recalculate prices, discounts, VAT for a basket without committing. */
     reCalculateBasket(basket: Basket, callOpts?: CallOptions): Promise<Basket>;
     /** Lock basket items for the duration of payment. */
@@ -968,4 +747,21 @@ declare function ymdWindow(before: number, after: number, today?: Date, tz?: str
     untilYmd: Ymd;
 };
 
-export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCardsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCard, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+/**
+ * Helpers for `General/FindSales` bons.
+ */
+
+/**
+ * The lines of a bon, deduplicated by line `id`.
+ *
+ * ⚠⚠ Recreatex returns the SAME line several times (identical `id`, `sequenceNumber` and
+ * amount), mostly on booking-bound lines (`mainOrganisedVisitId`). One production month read
+ * 284,934.70 € instead of 200,237.10 € before deduplication. Every evaluation of bon lines
+ * goes through this helper.
+ *
+ * Lines WITHOUT an `id` are kept as they are: one line too many is a smaller error than a
+ * real position that silently disappears.
+ */
+declare function dedupSaleLines(sale: Pick<Sale, 'lines'>): SaleLine[];
+
+export { AccessZone, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, FindPersonCardsCriteria, FindPersonCriteria, FindSalesCriteria, FindSalesPaging, GeneralModule, type GetRebookingCostsInput, GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, PaymentMethod, Person, PersonCard, PointOfSale, ReCreateXClient, type ReCreateXClientOptions, Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, Sale, SaleLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, dedupSaleLines, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };

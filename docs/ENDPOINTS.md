@@ -31,7 +31,9 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `general` | `reCalculateBasket(basket)` | `/Json/General/ReCalculateBasket/` | Basket totals |
 | `general` | `lockBasketItems(items)` | `/Json/General/LockBasketItems/` | Reserve items for payment |
 | `general` | `checkoutBasket(basket)` | `/Json/General/CheckoutBasket/` | Finalise sale |
-| `general` | `findPersonCards(criteria)` | `/Json/General/FindPersonCards/` | Cards / RFID wristbands (shape unverified, see below) |
+| `general` | `findPersonCards(criteria)` | `/Json/General/FindPersonCards/` | Cards / RFID wristbands (`card` is an object, see below) |
+| `general` | `getDigitalWallets(criteria)` | `/Json/General/GetDigitalWallets/` | Wallet per wristband: balance + open postings (all wallets without `personId`) |
+| `general` | `getDigitalWallet(cardNumber)` | `/Json/General/GetDigitalWallet/` | One wristband's wallet, `null` if unknown |
 | `general` | `findGiftCertificates(criteria)` | `/Json/General/FindGiftCertificates/` | Look up gift certificates by customer / id / number |
 | `general` | `setGiftCertificatePrinted(id)` | `/Json/General/SetGiftCertificatePrinted/` | Mark a cert as delivered (sets `printDate`) |
 | `manager` | `listSalesInformation(criteria)` | `/Json/ManagerApp/ListSalesInformation/` | Aggregated revenue |
@@ -94,10 +96,46 @@ Sending a real `Context` with a wrong password yields `"Invalid WSDL password"`,
 so the password cannot be side-stepped — only endpoint *existence* is
 discoverable this way.
 
+### ⚠ Read the server's own endpoint list first
+
+`GET https://wsdlspacemagic.recreatex.be/json/documentation` lists every JSON
+endpoint the service has (562 on 2026-10-24), and
+`/json/documentation/<Method>` shows path, request and response shape. The
+404 list below was built by GUESSING names, and it missed the wallets: for
+three months this file said a wristband's balance was unreachable. Grep that
+list before concluding an endpoint does not exist.
+
+### Cards / wristbands: what DOES exist (verified 2026-10-24)
+
+| Endpoint | What it gives | Notes |
+|---|---|---|
+| `General/GetDigitalWallets` | One wallet per physical wristband (3,090 at Space Magic): `cardNumber` (Gantner UID), `balance`, `creditLimit`, `articleDescription` (`Hauskredit Erwachsene`, `Geburtstags Wallet`, `Mitarbeiter`, …), `transactions` | **Omit `PersonId`** for all wallets (with it: only that customer's, e.g. the walk-in collective customer had 1,529); `PersonId: null` → HTTP 500. ~3.5 MB / 3–5 s with transactions. |
+| `General/GetDigitalWallet` | The same for one `CardNumber` | `digitalWallet: null` for an unknown number |
+| `General/GetCard` | The division card for a `CardString`, with its person cards | |
+| `Counter/GetCreditSalesByDivisionCard` | "SalesItems put on the customer's card" for a `PersonCardId` | Answers `result: true`, but was empty for all 2,533 band cards tried on 2026-10-24 (park closed, no open postings). Not wrapped. |
+| `Counter/GetTableSalesWithoutTable` | Open orders of a POS (`PointOfSaleId`, `SalesZoneId`) | Empty for F&B01 on 2026-10-24. Not wrapped. |
+
+**How the money on a band works** (read from the wallets, 2026-10-24):
+
+- Gastro and add-ons booked onto a band at a till appear as wallet
+  transactions with **`salesNo: 0`** (no bon yet). When the guest settles at
+  the exit (Nachzahlautomat / check-in desk), they disappear from the wallet
+  and the bon appears in `FindSales`.
+- What is never settled **stays**: `balance < 0`. On 2026-10-24: 96 bands,
+  1,857.20 €; 60 of them staff bands (unbilled staff meals), the 36 guest
+  bands all idle for 160+ days (lost / stolen / not returned).
+- ⚠ `balance` is the money figure. A transaction's `amount` repeats the booking
+  total on every line of a menu, but carries its own amount on duplicate
+  surcharge lines; summing `amount` is wrong either way.
+- ⚠ Transaction `date` is park-local time **without a zone**.
+- ⚠ A check-in on a REUSED band writes **no** wallet transaction (only issuing
+  a band the first time does). The wallets therefore cannot tell who is inside
+  the park either.
+
 ### Cards / wristbands — what does NOT exist
 
-Probed 2026-07-26. `General/FindPersonCards` is the **only** card-level
-endpoint. All of these 404:
+Probed 2026-07-26. All of these 404 (guessed names; see above for what does
+exist):
 
 `General/FindCards`, `FindCard`, `GetCards`, `GetPersonCard`,
 `FindCustomerCards`, `FindCardTransactions`, `GetCardBalance`,
@@ -114,7 +152,9 @@ Also 404, when looking for "who is currently inside": `FindPresences`,
 
 **Consequence:** live occupancy (`FindAccessZones().occupancy.visitorsCurrent`)
 is a bare counter. The JSON service offers no way to resolve it into the list
-of individual wristbands behind it.
+of individual wristbands behind it (the wallets don't either). After closing,
+a remainder of 1–15 is normal: bands that left without an exit scan. Whether
+money hangs on them is answered by the wallets: open postings dated today.
 
 One further endpoint exists but is not wrapped yet:
 `Subscriptions/FindSubscriptions`.

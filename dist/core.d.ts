@@ -489,20 +489,23 @@ interface FindSalesCriteria {
  * and by whether a person is attached.
  *
  * Field list verified against production on 2026-07-27: `$type`, `id`,
- * `description`, `card`, `personId`, `person`.
+ * `description`, `card`, `personId`, `person`. On 2026-10-24 the full list was
+ * read (14,363 records): `card` is an OBJECT ({@link DivisionCard}), not a
+ * string, and the description is the ticket loaded onto the card
+ * (`4h Eintritt Kinder - 2026`, `Partypaket - Pilot`, `Mitarbeiterband`, …).
  *
- * ⚠ **There is no balance field.** The stored value of an RFID wristband lives
- * in the Gantner purse and is not reachable through this API — no endpoint
- * exposes it (see `docs/ENDPOINTS.md`). Do not promise "remaining credit" to a
- * caller based on this record.
+ * ⚠ **This record has no balance field.** The balance of a wristband lives in
+ * its wallet: {@link GeneralModule.getDigitalWallets} /
+ * {@link GeneralModule.getDigitalWallet} (`docs/ENDPOINTS.md`). Until
+ * 2026-10-24 this comment said the balance was unreachable; that was wrong.
  *
  * ⚠ This endpoint also has no "currently open / checked in" filter, so it
- * cannot enumerate the bands still inside the park.
+ * cannot enumerate the bands still inside the park. Neither can the wallets.
  */
 interface PersonCard {
     id: string;
-    /** Card number as encoded on the wristband. */
-    card?: string | null;
+    /** The physical (or generated) card behind this record. */
+    card?: DivisionCard | null;
     /** Plain-text label of the card. */
     description?: string | null;
     /** Attached person, when the card is not anonymous. */
@@ -519,6 +522,117 @@ interface FindPersonCardsCriteria {
     customerId?: string;
     pageIndex?: number;
     pageSize?: number;
+}
+/**
+ * A division card: the medium behind a {@link PersonCard} or a
+ * {@link DigitalWallet}. Shape verified 2026-10-24 (`FindPersonCards`,
+ * `GetCard`).
+ */
+interface DivisionCard {
+    id: string;
+    /** The encoded number, e.g. a Gantner 7-byte UID like `04787CC28C1E91`. */
+    cardNumber?: string | null;
+    number?: string | null;
+    /**
+     * How the number is read. `GANTNER 7 BYTE UID` = a physical RFID wristband,
+     * `RANDOM` = a generated ticket number (Space Magic: 13,980 of 14,363).
+     */
+    peripheralString?: {
+        id?: string;
+        code?: string | null;
+        description?: string | null;
+    } | null;
+    personCards?: PersonCard[];
+    [extra: string]: unknown;
+}
+/**
+ * One line of a wallet booking.
+ *
+ * ⚠ `id` is the BOOKING, not the line: all lines of one booking (a menu and its
+ * components) share it.
+ *
+ * ⚠⚠ `amount` (the wallet effect) is NOT reliably per line. For a menu every
+ * line repeats the booking total (Burger Menü 4.95 + surcharge 0.30 → −5.25 on
+ * each of four lines); for two identical surcharge lines each carries its own
+ * −5 and the balance is −10. Never sum it; use {@link DigitalWallet.balance}
+ * for money and `salesLineAmount` to show what was bought.
+ */
+interface DigitalWalletTransaction {
+    id: string;
+    creationDate?: string | null;
+    /** Park-local time WITHOUT zone (`2026-10-22T16:31:50`). Do not parse as UTC. */
+    date?: string | null;
+    /**
+     * Bon number. `0` = booked onto the band at a till (gastro, add-ons) and not
+     * paid yet. Paid postings disappear from the wallet when the guest settles at
+     * the exit; what stays was never paid.
+     */
+    salesNo?: number | null;
+    amount?: number | null;
+    itemDescription?: string | null;
+    salesLineQuantity?: number | null;
+    salesLineUnitPriceInc?: number | null;
+    /** Line amount incl. VAT. */
+    salesLineAmount?: number | null;
+    /** `Hauskredit`, `BARZAHLUNG`, `VISA`, …; empty for open postings. */
+    paymentMethod?: string | null;
+    salesLineId?: string | null;
+    [extra: string]: unknown;
+}
+/**
+ * The wallet of one wristband, from `General/GetDigitalWallets` /
+ * `General/GetDigitalWallet`. Verified 2026-10-24 against 3,090 production
+ * wallets (one per physical band).
+ *
+ * ⚠ It does NOT tell whether the band is inside the park: a check-in on a
+ * reused band writes no transaction. Only issuing a band for the first time
+ * and bookings onto it do.
+ */
+interface DigitalWallet {
+    id: string;
+    /** Negative = owed by the band (unpaid postings). The authoritative money figure. */
+    balance: number;
+    creditLimit?: number | null;
+    isCreditLimitActivated?: boolean;
+    /** Only filled with `includes.transactions`. */
+    transactions?: DigitalWalletTransaction[];
+    /** The band's number (Gantner UID). */
+    cardNumber?: string | null;
+    cardId?: string | null;
+    /** The customer the band was issued under (often a walk-in/webshop collective customer). */
+    personId?: string | null;
+    transactionBalance?: number | null;
+    linkedCards?: Array<{
+        id: string;
+        cardNumber?: string | null;
+        number?: string | null;
+    }> | null;
+    /** Wallet article: `Hauskredit Erwachsene`, `Geburtstags Wallet`, `Mitarbeiter`, `Digital Wallet`, … */
+    articleDescription?: string | null;
+    overstayCharges?: unknown[] | null;
+    cardBlocked?: boolean;
+    lockedForPayout?: boolean;
+    salesRegistrationMode?: number;
+    [extra: string]: unknown;
+}
+interface DigitalWalletIncludes {
+    /** Wallet transactions (open postings, issue line). Default false: ~2× the payload. */
+    transactions?: boolean;
+    linkedCards?: boolean;
+    /** ⚠ Not a reliable "today" filter in practice; leave it off. */
+    onlyTransactionsToday?: boolean;
+    /** 0 € lines (menu components, the issue line). */
+    zeroAmountLines?: boolean;
+    cancelledRecords?: boolean;
+}
+interface GetDigitalWalletsCriteria {
+    /**
+     * Only this person's wallets. ⚠ Leave it out to get ALL wallets (Space
+     * Magic 2026-10-24: 3,090 over 157 persons, the two collective customers alone
+     * 2,533). `null` is rejected by the server (HTTP 500, "cast to System.Guid").
+     */
+    personId?: string;
+    includes?: DigitalWalletIncludes;
 }
 /**
  * A single gift-certificate record as returned by `FindGiftCertificates`.
@@ -626,25 +740,50 @@ declare class GeneralModule {
     /**
      * Look up cards (RFID wristbands, subscription cards, voucher cards).
      *
-     * This is the only card-level endpoint the JSON service exposes — probing
-     * confirmed that `FindCards`, `GetCards`, `FindCustomerCards`,
-     * `FindCardTransactions`, `GetCardBalance` and the whole `Access/` and
-     * `Cards/` namespaces all 404. If you need per-wristband data, it comes
-     * from here or not at all.
+     * Probing showed that guessed names like `FindCards`, `GetCards`,
+     * `FindCustomerCards`, `FindCardTransactions`, `GetCardBalance` and the
+     * whole `Access/` and `Cards/` namespaces 404. ⚠ That list was GUESSED; the
+     * server's own endpoint list (`/json/documentation`, 562 entries) has more
+     * card-level calls: `GetCard`, `GetDigitalWallets`/`GetDigitalWallet` (the
+     * money on a band, see {@link getDigitalWallets}) and
+     * `Counter/GetCreditSalesByDivisionCard`. Check that list before concluding
+     * something does not exist.
      *
-     * ⚠ The response shape is not yet verified against an authenticated call —
-     * see the caveat on {@link PersonCard}. Treat the result as
-     * shape-tolerant and log `[extra]` fields the first time you run it.
+     * ⚠ `card` is an object ({@link DivisionCard}), verified 2026-10-24.
      *
      * ⚠ This does NOT enumerate "currently inside the park". Live occupancy is
-     * a counter on the access zone (`findAccessZones().occupancy`), and the
-     * JSON service exposes no endpoint that maps that count back to the
-     * individual bands behind it.
+     * a counter on the access zone (`findAccessZones().occupancy`), and no
+     * endpoint maps that count back to the individual bands behind it.
      *
      * @example
      *   const cards = await client.general.findPersonCards({ number: '1234' });
      */
     findPersonCards(criteria?: FindPersonCardsCriteria, callOpts?: CallOptions): Promise<PersonCard[]>;
+    /**
+     * The wallets of the wristbands: balance and (with `includes.transactions`)
+     * the open postings (gastro and add-ons booked onto the band, `salesNo: 0`,
+     * not paid yet). A negative `balance` is money that left the park unpaid, or
+     * is still inside it.
+     *
+     * ⚠ Without `personId` this returns ALL wallets (one call; Space Magic
+     * 2026-10-24: 3,090 wallets, 3.5 MB with transactions, 3–5 s). Hence the
+     * default timeout of 60 s here. With `personId` only that customer's wallets.
+     *
+     * ⚠ Use `balance` for money, not a sum over transaction lines (see
+     * {@link DigitalWalletTransaction}).
+     *
+     * ⚠ Does NOT say which bands are inside the park.
+     *
+     * @example
+     *   const wallets = await rx.general.getDigitalWallets({ includes: { transactions: true } });
+     *   const owed = wallets.filter((w) => w.balance < 0);
+     */
+    getDigitalWallets(criteria?: GetDigitalWalletsCriteria, callOpts?: CallOptions): Promise<DigitalWallet[]>;
+    /**
+     * The wallet of one wristband, by its card number (e.g. the Gantner UID
+     * `048363CA801D91`). `null` for an unknown number (verified 2026-10-24).
+     */
+    getDigitalWallet(cardNumber: string, includes?: DigitalWalletIncludes, callOpts?: CallOptions): Promise<DigitalWallet | null>;
     /**
      * Mark a gift certificate as printed/delivered. Recreatex sets `printDate`
      * on the cert. Best-effort — if it fails, the voucher is still valid; the
@@ -968,4 +1107,4 @@ declare function ymdWindow(before: number, after: number, today?: Date, tz?: str
     untilYmd: Ymd;
 };
 
-export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, type Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCardsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCard, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+export { type AccessZone, type AccessZoneOccupancy, type AccessZoneReader, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, type DigitalWallet, type DigitalWalletIncludes, type DigitalWalletTransaction, type Division, type DivisionCard, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, type FindAccessZonesCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, type FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, type FindPersonCardsCriteria, type FindPersonCriteria, type FindSalesCriteria, GeneralModule, type GetDigitalWalletsCriteria, type GetRebookingCostsInput, type GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, type PaymentMethod, type Person, type PersonAddress, type PersonCard, type PersonCredential, type PointOfSale, ReCreateXClient, type ReCreateXClientOptions, type Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, type Sale, type SaleLine, type SalePaymentLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };

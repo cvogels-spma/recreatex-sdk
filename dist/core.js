@@ -463,6 +463,15 @@ var ExpositionsModule = class {
 };
 
 // src/core/modules/general.ts
+function walletIncludes(i = {}) {
+  return {
+    Transactions: i.transactions ?? false,
+    LinkedCards: i.linkedCards ?? false,
+    OnlyTransactionsToday: i.onlyTransactionsToday ?? false,
+    ZeroAmountLines: i.zeroAmountLines ?? null,
+    CancelledRecords: i.cancelledRecords ?? null
+  };
+}
 var GeneralModule = class {
   constructor(client) {
     this.client = client;
@@ -650,20 +659,20 @@ var GeneralModule = class {
   /**
    * Look up cards (RFID wristbands, subscription cards, voucher cards).
    *
-   * This is the only card-level endpoint the JSON service exposes — probing
-   * confirmed that `FindCards`, `GetCards`, `FindCustomerCards`,
-   * `FindCardTransactions`, `GetCardBalance` and the whole `Access/` and
-   * `Cards/` namespaces all 404. If you need per-wristband data, it comes
-   * from here or not at all.
+   * Probing showed that guessed names like `FindCards`, `GetCards`,
+   * `FindCustomerCards`, `FindCardTransactions`, `GetCardBalance` and the
+   * whole `Access/` and `Cards/` namespaces 404. ⚠ That list was GUESSED; the
+   * server's own endpoint list (`/json/documentation`, 562 entries) has more
+   * card-level calls: `GetCard`, `GetDigitalWallets`/`GetDigitalWallet` (the
+   * money on a band, see {@link getDigitalWallets}) and
+   * `Counter/GetCreditSalesByDivisionCard`. Check that list before concluding
+   * something does not exist.
    *
-   * ⚠ The response shape is not yet verified against an authenticated call —
-   * see the caveat on {@link PersonCard}. Treat the result as
-   * shape-tolerant and log `[extra]` fields the first time you run it.
+   * ⚠ `card` is an object ({@link DivisionCard}), verified 2026-10-24.
    *
    * ⚠ This does NOT enumerate "currently inside the park". Live occupancy is
-   * a counter on the access zone (`findAccessZones().occupancy`), and the
-   * JSON service exposes no endpoint that maps that count back to the
-   * individual bands behind it.
+   * a counter on the access zone (`findAccessZones().occupancy`), and no
+   * endpoint maps that count back to the individual bands behind it.
    *
    * @example
    *   const cards = await client.general.findPersonCards({ number: '1234' });
@@ -685,6 +694,47 @@ var GeneralModule = class {
       callOpts ?? {}
     );
     return data.findPersonCardsResult?.personCards ?? data.personCards ?? data.cards ?? [];
+  }
+  /**
+   * The wallets of the wristbands: balance and (with `includes.transactions`)
+   * the open postings (gastro and add-ons booked onto the band, `salesNo: 0`,
+   * not paid yet). A negative `balance` is money that left the park unpaid, or
+   * is still inside it.
+   *
+   * ⚠ Without `personId` this returns ALL wallets (one call; Space Magic
+   * 2026-10-24: 3,090 wallets, 3.5 MB with transactions, 3–5 s). Hence the
+   * default timeout of 60 s here. With `personId` only that customer's wallets.
+   *
+   * ⚠ Use `balance` for money, not a sum over transaction lines (see
+   * {@link DigitalWalletTransaction}).
+   *
+   * ⚠ Does NOT say which bands are inside the park.
+   *
+   * @example
+   *   const wallets = await rx.general.getDigitalWallets({ includes: { transactions: true } });
+   *   const owed = wallets.filter((w) => w.balance < 0);
+   */
+  async getDigitalWallets(criteria = {}, callOpts) {
+    const Criteria = { Includes: walletIncludes(criteria.includes) };
+    if (criteria.personId) Criteria.PersonId = criteria.personId;
+    const data = await this.client.post(
+      "Json/General/GetDigitalWallets",
+      { Criteria },
+      { timeoutMs: 6e4, ...callOpts }
+    );
+    return data.digitalWallets ?? data.DigitalWallets ?? [];
+  }
+  /**
+   * The wallet of one wristband, by its card number (e.g. the Gantner UID
+   * `048363CA801D91`). `null` for an unknown number (verified 2026-10-24).
+   */
+  async getDigitalWallet(cardNumber, includes, callOpts) {
+    const data = await this.client.post(
+      "Json/General/GetDigitalWallet",
+      { Criteria: { CardNumber: cardNumber, Includes: walletIncludes(includes) } },
+      callOpts ?? {}
+    );
+    return data.digitalWallet ?? data.DigitalWallet ?? null;
   }
   /**
    * Mark a gift certificate as printed/delivered. Recreatex sets `printDate`

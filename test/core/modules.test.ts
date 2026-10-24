@@ -231,17 +231,24 @@ describe('GeneralModule', () => {
   });
 
   it('findPersonCards sends paging + filters and reads the nested result', async () => {
-    // Shape wie live verifiziert (2026-07-27): id, description, card, personId,
-    // person — insbesondere KEIN Guthaben-Feld.
+    // Shape wie live verifiziert (2026-07-27, voll gelesen 2026-10-24): id,
+    // description, card, personId, person. `card` ist ein OBJEKT, und ein
+    // Guthaben steht nicht hier, sondern im Wallet (getDigitalWallets).
+    const card = {
+      id: 'c-1', cardNumber: '04787CC28C1E91', number: '04787CC28C1E91',
+      peripheralString: { id: 'ps-1', code: 'GANTNER 7 BYTE UID', description: 'Gantner 7 Byte UID' },
+      personCards: [],
+    };
     const { fetch, calls } = fetchSpy({
       findPersonCardsResult: {
-        personCards: [{ id: 'pc-1', card: '00123', description: 'Jahreskarte', personId: 'p-1' }],
+        personCards: [{ id: 'pc-1', card, description: 'Partypaket - Pilot', personId: 'p-1' }],
       },
     });
     const rx = new ReCreateXClient({ ...baseConfig, fetch });
     const cards = await rx.general.findPersonCards({ number: '00123', pageSize: 10 });
     expect(cards).toHaveLength(1);
-    expect(cards[0]?.card).toBe('00123');
+    expect(cards[0]?.card?.cardNumber).toBe('04787CC28C1E91');
+    expect(cards[0]?.card?.peripheralString?.code).toBe('GANTNER 7 BYTE UID');
     expect(cards[0]?.personId).toBe('p-1');
     const body = calls[0]?.body as { Criteria?: Record<string, unknown> } | null;
     expect(body?.Criteria?.Number).toBe('00123');
@@ -257,6 +264,57 @@ describe('GeneralModule', () => {
     const alt = fetchSpy({ cards: [{ id: 'pc-3' }] });
     const rx2 = new ReCreateXClient({ ...baseConfig, fetch: alt.fetch });
     expect((await rx2.general.findPersonCards())[0]?.id).toBe('pc-3');
+  });
+
+  // Aus den echten Wallets vom 24.10.2026 (Nummern ersetzt): ein Mitarbeiterband mit
+  // einem Menü, das die Buchungssumme an jeder Zeile trägt.
+  const WALLET = {
+    id: 'w-1', balance: -5.25, creditLimit: 100, isCreditLimitActivated: true,
+    cardNumber: '04A626CA801D95', cardId: 'c-1', personId: '032a299f-45ea-4144-ad66-93b965b37f0b',
+    articleDescription: 'Mitarbeiter', overstayCharges: [], cardBlocked: false,
+    transactions: [
+      { id: 'b-1', date: '2026-07-03T13:38:15', salesNo: 2000076801, amount: 0, itemDescription: 'Mitarbeiter', salesLineAmount: 0 },
+      { id: 'b-2', date: '2026-07-03T13:39:19.633', salesNo: 0, amount: -5.25, itemDescription: 'Burger Menü', salesLineAmount: 4.95 },
+      { id: 'b-2', date: '2026-07-03T13:39:19.633', salesNo: 0, amount: -5.25, itemDescription: 'Cheeseburger normal', salesLineAmount: 0.3 },
+    ],
+  };
+
+  it('getDigitalWallets without personId sends NO PersonId key and all Includes flags', async () => {
+    const { fetch, calls } = fetchSpy({ digitalWallets: [WALLET] });
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    const wallets = await rx.general.getDigitalWallets({ includes: { transactions: true, zeroAmountLines: true } });
+    expect(wallets).toHaveLength(1);
+    expect(wallets[0]?.balance).toBe(-5.25);
+    expect(wallets[0]?.transactions?.filter((t) => t.salesNo === 0)).toHaveLength(2);
+    expect(calls[0]?.url).toMatch(/Json\/General\/GetDigitalWallets\/$/);
+    const criteria = (calls[0]?.body as { Criteria: Record<string, unknown> }).Criteria;
+    // ⚠ `PersonId: null` beantwortet der Server mit HTTP 500, der Schlüssel muss fehlen.
+    expect('PersonId' in criteria).toBe(false);
+    expect(criteria.Includes).toEqual({
+      Transactions: true, LinkedCards: false, OnlyTransactionsToday: false, ZeroAmountLines: true, CancelledRecords: null,
+    });
+  });
+
+  it('getDigitalWallets with personId filters, defaults to no transactions, tolerates a missing list', async () => {
+    const { fetch, calls } = fetchSpy({});
+    const rx = new ReCreateXClient({ ...baseConfig, fetch });
+    expect(await rx.general.getDigitalWallets({ personId: 'p-1' })).toEqual([]);
+    const criteria = (calls[0]?.body as { Criteria: Record<string, unknown> }).Criteria;
+    expect(criteria.PersonId).toBe('p-1');
+    expect((criteria.Includes as Record<string, unknown>).Transactions).toBe(false);
+  });
+
+  it('getDigitalWallet reads one band by card number and returns null for an unknown one', async () => {
+    const hit = fetchSpy({ digitalWallet: WALLET });
+    const rx1 = new ReCreateXClient({ ...baseConfig, fetch: hit.fetch });
+    expect((await rx1.general.getDigitalWallet('04A626CA801D95', { transactions: true }))?.balance).toBe(-5.25);
+    const body = hit.calls[0]?.body as { Criteria: Record<string, unknown> };
+    expect(body.Criteria.CardNumber).toBe('04A626CA801D95');
+    expect(hit.calls[0]?.url).toMatch(/Json\/General\/GetDigitalWallet\/$/);
+
+    const miss = fetchSpy({ digitalWallet: null });
+    const rx2 = new ReCreateXClient({ ...baseConfig, fetch: miss.fetch });
+    expect(await rx2.general.getDigitalWallet('04FFFFFFFFFFFF')).toBeNull();
   });
 
   it('setGiftCertificatePrinted sends Criteria.Id and resolves', async () => {

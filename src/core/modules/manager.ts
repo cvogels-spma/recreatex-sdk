@@ -28,6 +28,32 @@ interface VisitingCustomersResponse {
   message?: string;
 }
 
+/**
+ * The filter part of both ManagerApp criteria.
+ *
+ * ⚠ The server only knows the LIST fields `DivisionIds` / `ArticleGroupIds`. Up to v0.3 the SDK
+ * sent singular `DivisionId` / `ArticleGroupId`, which the server silently ignored: a call
+ * "filtered" to the socks group returned the whole day (16,465.51 € instead of 792.51 €,
+ * verified 2026-10-25).
+ */
+function managerFilter(criteria: SalesInformationCriteria | VisitingCustomersCriteria): Record<string, unknown> {
+  const Criteria: Record<string, unknown> = {
+    From: criteria.from,
+    Until: criteria.until,
+  };
+  const divisionIds = [...(criteria.divisionIds ?? []), ...(criteria.divisionId ? [criteria.divisionId] : [])];
+  const articleGroupIds = [
+    ...(criteria.articleGroupIds ?? []),
+    ...(criteria.articleGroupId ? [criteria.articleGroupId] : []),
+  ];
+  if (divisionIds.length) Criteria.DivisionIds = divisionIds;
+  if (articleGroupIds.length) Criteria.ArticleGroupIds = articleGroupIds;
+  if (criteria.groupByDate) Criteria.GroupByDate = true;
+  if (criteria.groupByDivision) Criteria.GroupByDivision = true;
+  if (criteria.groupByArticleGroup) Criteria.GroupByArticleGroup = true;
+  return Criteria;
+}
+
 export class ManagerModule {
   constructor(private readonly client: ReCreateXClient) {}
 
@@ -36,15 +62,7 @@ export class ManagerModule {
     criteria: SalesInformationCriteria,
     callOpts?: CallOptions,
   ): Promise<SalesInformationEntry[]> {
-    const Criteria: Record<string, unknown> = {
-      From: criteria.from,
-      Until: criteria.until,
-    };
-    if (criteria.divisionId) Criteria.DivisionId = criteria.divisionId;
-    if (criteria.articleGroupId) Criteria.ArticleGroupId = criteria.articleGroupId;
-    if (criteria.groupByDate) Criteria.GroupByDate = true;
-    if (criteria.groupByDivision) Criteria.GroupByDivision = true;
-    if (criteria.groupByArticleGroup) Criteria.GroupByArticleGroup = true;
+    const Criteria = managerFilter(criteria);
 
     const data = await this.client.post<SalesInformationResponse>(
       'Json/ManagerApp/ListSalesInformation',
@@ -64,15 +82,7 @@ export class ManagerModule {
     criteria: VisitingCustomersCriteria,
     callOpts?: CallOptions,
   ): Promise<VisitingCustomersEntry[]> {
-    const Criteria: Record<string, unknown> = {
-      From: criteria.from,
-      Until: criteria.until,
-    };
-    if (criteria.divisionId) Criteria.DivisionId = criteria.divisionId;
-    if (criteria.articleGroupId) Criteria.ArticleGroupId = criteria.articleGroupId;
-    if (criteria.groupByDate) Criteria.GroupByDate = true;
-    if (criteria.groupByDivision) Criteria.GroupByDivision = true;
-    if (criteria.groupByArticleGroup) Criteria.GroupByArticleGroup = true;
+    const Criteria = managerFilter(criteria);
 
     const data = await this.client.post<VisitingCustomersResponse>(
       'Json/ManagerApp/ListVisitingCustomersInformation',

@@ -73,7 +73,8 @@ interface ListPaymentMethodsResponse {
 
 interface FindPersonResponse {
   persons?: Person[];
-  result?: { persons?: Person[] };
+  /** What the server actually sends (2026-10-25): `result` IS the list. */
+  result?: Person[] | { persons?: Person[] };
   succes?: boolean;
   message?: string;
 }
@@ -239,20 +240,33 @@ export class GeneralModule {
     return data.paymentMethods ?? [];
   }
 
-  /** Look up persons. Provide at least one filter. */
+  /**
+   * Look up persons. At least one filter is required.
+   *
+   * ⚠⚠ Fixed in v0.4 (verified 2026-10-25): the server answers `{ result: Person[] }`, and the
+   * SDK read `persons` / `result.persons`, so this method ALWAYS returned `[]`. And `LastName`
+   * is not a server criterion: it was ignored and the call returned an unfiltered page (50
+   * arbitrary persons). The surname goes into `Name`. A call without any filter is rejected
+   * here for the same reason: it would return arbitrary persons.
+   */
   async findPerson(criteria: FindPersonCriteria, callOpts?: CallOptions): Promise<Person[]> {
     const Criteria: Record<string, unknown> = {};
     if (criteria.id) Criteria.Id = criteria.id;
     if (criteria.email) Criteria.Email = criteria.email;
     if (criteria.firstName) Criteria.FirstName = criteria.firstName;
-    if (criteria.lastName) Criteria.LastName = criteria.lastName;
-    if (criteria.username) Criteria.Username = criteria.username;
+    const name = criteria.name ?? criteria.lastName;
+    if (name) Criteria.Name = name;
+    if (criteria.username) Criteria.UserName = criteria.username;
+    if (Object.keys(Criteria).length === 0) {
+      throw new Error('findPerson: provide at least one filter (id, email, firstName, name, username)');
+    }
 
     const data = await this.client.post<FindPersonResponse>(
       'Json/General/FindPerson',
       { Criteria },
       callOpts ?? {},
     );
+    if (Array.isArray(data.result)) return data.result;
     return data.persons ?? data.result?.persons ?? [];
   }
 
@@ -390,7 +404,14 @@ export class GeneralModule {
   // ---- Gift certificates -----------------------------------------------
 
   /**
-   * Find gift certificates, e.g. by customer or by id. Newest first.
+   * Find gift certificates of a customer, one page. Newest first.
+   *
+   * ⚠⚠ The server filters only by `CustomerId` and `Barcode`. `Id` and `Number` are not server
+   * criteria and are IGNORED: a call with an id returned the whole page (50 of 50, verified
+   * 2026-10-25). Match `id` / `number` / `salesSeriesID` yourself on the returned records, and
+   * page through until you find it. This method deliberately does NOT filter locally: callers
+   * page with `pageIndex` and stop at a short page, and a filtered page would stop them early
+   * (spma-relaunch-2026 does exactly that).
    *
    * @example
    *   const certs = await client.general.findGiftCertificates({
@@ -409,6 +430,8 @@ export class GeneralModule {
       },
     };
     if (criteria.customerId) Criteria.CustomerId = criteria.customerId;
+    if (criteria.barcode) Criteria.Barcode = criteria.barcode;
+    // Sent for compatibility only; the server ignores both (see above).
     if (criteria.id) Criteria.Id = criteria.id;
     if (criteria.number) Criteria.Number = criteria.number;
 
@@ -457,8 +480,9 @@ export class GeneralModule {
     };
     if (criteria.id) Criteria.Id = criteria.id;
     if (criteria.number) Criteria.Number = criteria.number;
+    if (criteria.cardString) Criteria.CardString = criteria.cardString;
     if (criteria.personId) Criteria.PersonId = criteria.personId;
-    if (criteria.customerId) Criteria.CustomerId = criteria.customerId;
+    // `customerId` is deliberately not sent: the server ignores it (see the type).
 
     const data = await this.client.post<FindPersonCardsResponse>(
       'Json/General/FindPersonCards',

@@ -77,7 +77,9 @@ export class ArticlesModule {
         PageSize: criteria.pageSize ?? 50,
       },
       Includes: {
-        Price: criteria.includes?.price ?? true,
+        // ⚠ The wire flag is `Price`; `PriceInfo` does not exist and loaded nothing (price 0
+        // when sent alone, verified 2026-10-25). `priceInfo` stays as an alias.
+        Price: criteria.includes?.price ?? criteria.includes?.priceInfo ?? true,
         ImageUrl: criteria.includes?.imageUrl ?? true,
         ...(criteria.includes?.image !== undefined && { Image: criteria.includes.image }),
         ...(criteria.includes?.group !== undefined && { Group: criteria.includes.group }),
@@ -91,14 +93,16 @@ export class ArticlesModule {
         ...(criteria.includes?.rentArticles !== undefined && { RentArticles: criteria.includes.rentArticles }),
         ...(criteria.includes?.freeArticles !== undefined && { FreeArticles: criteria.includes.freeArticles }),
         Translations: criteria.includes?.translations ?? false,
-        ...(criteria.includes?.priceInfo !== undefined && { PriceInfo: criteria.includes.priceInfo }),
       },
     };
-    if (criteria.articleId) SearchCriteria.ArticleID = criteria.articleId;
+    if (criteria.articleId) SearchCriteria.ArticleId = criteria.articleId;
     if (criteria.articleGroupId) SearchCriteria.ArticleGroupId = criteria.articleGroupId;
     if (criteria.namePattern) SearchCriteria.NamePattern = criteria.namePattern;
-    if (criteria.code) SearchCriteria.Code = criteria.code;
+    // ⚠ No `Code` here: the server has no such criterion and returned every article for it
+    // (verified 2026-10-25). `findArticles` filters `code` locally after paging.
     if (criteria.barcode) SearchCriteria.Barcode = criteria.barcode;
+    // ⚠ `DivisionId` is not a documented SearchCriteria field and had no effect in a test on
+    // 2026-10-25; kept for compatibility.
     if (criteria.divisionId) SearchCriteria.DivisionId = criteria.divisionId;
     if (criteria.includeDetail !== undefined) SearchCriteria.IncludeDetail = criteria.includeDetail;
     if (criteria.stockLocationId) SearchCriteria.StockLocationId = criteria.stockLocationId;
@@ -131,11 +135,16 @@ export class ArticlesModule {
       pageSize: criteria.pageSize ?? 50,
       ...paginateOpts,
     };
-    return paginate(
+    const alle = await paginate(
       ({ pageIndex, pageSize }) =>
         this.findArticlesPage({ ...criteria, pageIndex, pageSize }, callOpts),
       pageOptions,
     );
+    // ⚠ `code` is filtered HERE, after paging, and not in `findArticlesPage`: a filtered page
+    // would be short, and callers that page themselves stop at the first short page.
+    if (!criteria.code) return alle;
+    const code = criteria.code.trim().toLowerCase();
+    return alle.filter((a) => String(a.code ?? '').trim().toLowerCase() === code);
   }
 
   /** Fetch a single article by GUID. */
@@ -294,7 +303,8 @@ export class ArticlesModule {
         divisionId: criteria.divisionId,
         includes: { price: true, imageUrl: true, vat: true, group: true },
       },
-      { pageSize: criteria.pageSize ?? 50, maxPages: 5 },
+      // Enough for the whole catalogue (156 articles on 2026-10-25); `code` is matched locally.
+      { pageSize: criteria.pageSize ?? 50, maxPages: 40 },
       callOpts,
     );
     if (matches.length === 0) {

@@ -94,24 +94,39 @@ export interface PersonAddress {
   telephone?: string;
 }
 
+/**
+ * A person from `General/FindPerson`. Field list read on 2026-10-25: the record carries `name`
+ * (no separate `firstName` / `lastName`), plus email, phones, address, credential, contacts,
+ * relations, company data and more (see `[extra]`).
+ */
 export interface Person {
   id: string;
+  name?: string;
+  /** @deprecated Not part of the FindPerson record (2026-10-25); read `name`. */
   firstName?: string;
+  /** @deprecated Not part of the FindPerson record (2026-10-25); read `name`. */
   lastName?: string;
   email?: string;
   cellPhone?: string;
+  phone?: string;
   language?: string;
   credential?: PersonCredential;
   address?: PersonAddress;
   birthDate?: string;
+  externCustomerNumber?: string | null;
   [extra: string]: unknown;
 }
 
+/** Filters for `General/FindPerson`; at least one is required. */
 export interface FindPersonCriteria {
   id?: string;
   email?: string;
   firstName?: string;
+  /** Surname / name (wire field `Name`). */
+  name?: string;
+  /** @deprecated Alias of `name`; the server has no `LastName` criterion. */
   lastName?: string;
+  /** Login name (wire field `UserName`). */
   username?: string;
 }
 
@@ -240,7 +255,13 @@ export interface FindPersonCardsCriteria {
   id?: string;
   /** Card number as printed/encoded on the wristband. */
   number?: string;
+  /** Wire field `CardString`. */
+  cardString?: string;
   personId?: string;
+  /**
+   * @deprecated Not a server criterion: it was ignored (2026-10-25) and the call returned the
+   * unfiltered page. No longer sent; use `personId`.
+   */
   customerId?: string;
   pageIndex?: number;
   pageSize?: number;
@@ -384,9 +405,13 @@ export interface GiftCertificate {
 }
 
 export interface FindGiftCertificatesCriteria {
-  /** Recreatex Person GUID — typically the customer who placed the order. */
+  /** Recreatex Person GUID, typically the customer who placed the order. Filters server-side. */
   customerId?: string;
+  /** Filters server-side (wire field `Barcode`). */
+  barcode?: string;
+  /** ⚠ IGNORED by the server (2026-10-25); match `id` on the results yourself. */
   id?: string;
+  /** ⚠ IGNORED by the server (2026-10-25); match `number` on the results yourself. */
   number?: string;
   pageIndex?: number;
   pageSize?: number;

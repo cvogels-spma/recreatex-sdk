@@ -1,5 +1,5 @@
-import { O as OrganisedVisitTicketAdjustment, a as OrganisedVisitSaleAdjustment, E as Exposition, b as ExpositionPeriodDate, Y as Ymd, c as ExpositionDayOverview, d as ExpositionPeriodRef, F as FindOrganisedVisitsCriteria, e as OrganisedVisit, f as OrganisedVisitPeriodTransfer, g as FindAccessZonesCriteria, A as AccessZone, R as Reader, D as Division, P as PointOfSale, h as PaymentMethod, i as FindPersonCriteria, j as Person, k as FindSalesCriteria, l as FindSalesPaging, S as Sale, B as Basket, m as BasketItem, C as CheckoutResponse, n as FindGiftCertificatesCriteria, G as GiftCertificate, o as FindPersonCardsCriteria, p as PersonCard, q as GetDigitalWalletsCriteria, r as DigitalWallet, s as DigitalWalletIncludes, t as RecreatexDateTime, u as RecreatexContext, v as RecreatexEnvelope, w as SaleLine } from './basket-DB0OLSPh.js';
-export { x as AccessZoneOccupancy, y as AccessZoneReader, z as AnonymousPerson, H as ArticleSaleItem, I as BasketPayment, J as BasketTypeString, K as BasketTypeStrings, L as BasketValidationResult, M as CheckoutResult, N as DigitalWalletTransaction, Q as DivisionCard, T as ExpositionPeriod, U as ExpositionPeriodPrice, V as ExpositionPeriodReservationEntry, W as ExpositionPeriodReservationItem, X as OrganisedVisitArticle, Z as OrganisedVisitPeriodReservation, _ as OrganisedVisitPerson, $ as OrganisedVisitPersonAddress, a0 as OrganisedVisitRebookingItem, a1 as OrganisedVisitSaleGuest, a2 as OrganisedVisitSaleInfo, a3 as Paging, a4 as PersonAddress, a5 as PersonCredential, a6 as SalePaymentLine } from './basket-DB0OLSPh.js';
+import { O as OrganisedVisitTicketAdjustment, a as OrganisedVisitSaleAdjustment, E as Exposition, b as ExpositionPeriodDate, Y as Ymd, c as ExpositionDayOverview, d as ExpositionPeriodRef, F as FindOrganisedVisitsCriteria, e as OrganisedVisit, f as OrganisedVisitPeriodTransfer, g as FindAccessZonesCriteria, A as AccessZone, R as Reader, D as Division, P as PointOfSale, h as PaymentMethod, i as FindPersonCriteria, j as Person, k as FindSalesCriteria, l as FindSalesPaging, S as Sale, B as Basket, m as BasketItem, C as CheckoutResponse, n as FindGiftCertificatesCriteria, G as GiftCertificate, o as FindPersonCardsCriteria, p as PersonCard, q as GetDigitalWalletsCriteria, r as DigitalWallet, s as DigitalWalletIncludes, t as RecreatexDateTime, u as RecreatexContext, v as RecreatexEnvelope, w as SaleLine } from './basket-BW8TpUDK.js';
+export { x as AccessZoneOccupancy, y as AccessZoneReader, z as AnonymousPerson, H as ArticleSaleItem, I as BasketPayment, J as BasketTypeString, K as BasketTypeStrings, L as BasketValidationResult, M as CheckoutResult, N as DigitalWalletTransaction, Q as DivisionCard, T as ExpositionPeriod, U as ExpositionPeriodPrice, V as ExpositionPeriodReservationEntry, W as ExpositionPeriodReservationItem, X as OrganisedVisitArticle, Z as OrganisedVisitPeriodReservation, _ as OrganisedVisitPerson, $ as OrganisedVisitPersonAddress, a0 as OrganisedVisitRebookingItem, a1 as OrganisedVisitSaleGuest, a2 as OrganisedVisitSaleInfo, a3 as Paging, a4 as PersonAddress, a5 as PersonCredential, a6 as SalePaymentLine } from './basket-BW8TpUDK.js';
 
 /**
  * Retry helpers. Only network-level failures and 5xx HTTP errors are
@@ -76,17 +76,23 @@ interface ArticleGroup {
 }
 /** Search input for `Articles/FindArticles`. */
 interface FindArticlesCriteria {
-    /** Exact article GUID. Wire name is `ArticleID` in the Recreatex docs. */
+    /** Exact article GUID (wire name `ArticleId`). */
     articleId?: string;
     /** Restrict to an article group GUID. */
     articleGroupId?: string;
     /** Substring match on article name. */
     namePattern?: string;
-    /** Exact code match. */
+    /**
+     * Exact code match, applied LOCALLY by `findArticles` after paging. The server has no code
+     * criterion (it returned every article for one, 2026-10-25); `findArticlesPage` ignores it.
+     */
     code?: string;
     /** Exact barcode match. */
     barcode?: string;
-    /** Restrict to a division (e.g. `DIVISION_IDS.spaceMagic`). */
+    /**
+     * ⚠ Not a documented SearchCriteria field; had no effect in a test on 2026-10-25. Set the
+     * client option `divisionId` (Context) if you need a division.
+     */
     divisionId?: string;
     /** Include article options, ingredients and warehouses. */
     includeDetail?: boolean;
@@ -116,6 +122,7 @@ interface FindArticlesCriteria {
         rentArticles?: boolean;
         freeArticles?: boolean;
         translations?: boolean;
+        /** @deprecated No such wire flag; treated as an alias of `price`. */
         priceInfo?: boolean;
     };
 }
@@ -128,6 +135,9 @@ interface ArticlePriceInformation {
     priceGroup?: string | null;
     familyComposition?: string | null;
     subsidizationPrice?: string | number | null;
+    /** Wire name verified 2026-10-25 (`additional…`, not `addition…`). */
+    additionalSupplementPrice?: number | null;
+    /** @deprecated Misspelt in v0.3 and never filled; use `additionalSupplementPrice`. */
     additionSupplementPrice?: number | null;
     donationPrice?: number | null;
     [extra: string]: unknown;
@@ -490,7 +500,15 @@ declare class GeneralModule {
     getPointOfSales(callOpts?: CallOptions): Promise<PointOfSale[]>;
     /** All payment methods (~32 entries). */
     listPaymentMethods(callOpts?: CallOptions): Promise<PaymentMethod[]>;
-    /** Look up persons. Provide at least one filter. */
+    /**
+     * Look up persons. At least one filter is required.
+     *
+     * ⚠⚠ Fixed in v0.4 (verified 2026-10-25): the server answers `{ result: Person[] }`, and the
+     * SDK read `persons` / `result.persons`, so this method ALWAYS returned `[]`. And `LastName`
+     * is not a server criterion: it was ignored and the call returned an unfiltered page (50
+     * arbitrary persons). The surname goes into `Name`. A call without any filter is rejected
+     * here for the same reason: it would return arbitrary persons.
+     */
     findPerson(criteria: FindPersonCriteria, callOpts?: CallOptions): Promise<Person[]>;
     /**
      * One page of `General/FindSales`.
@@ -538,7 +556,14 @@ declare class GeneralModule {
      */
     checkoutBasket(basket: Basket, callOpts?: CallOptions): Promise<CheckoutResponse['result']>;
     /**
-     * Find gift certificates, e.g. by customer or by id. Newest first.
+     * Find gift certificates of a customer, one page. Newest first.
+     *
+     * ⚠⚠ The server filters only by `CustomerId` and `Barcode`. `Id` and `Number` are not server
+     * criteria and are IGNORED: a call with an id returned the whole page (50 of 50, verified
+     * 2026-10-25). Match `id` / `number` / `salesSeriesID` yourself on the returned records, and
+     * page through until you find it. This method deliberately does NOT filter locally: callers
+     * page with `pageIndex` and stop at a short page, and a filtered page would stop them early
+     * (spma-relaunch-2026 does exactly that).
      *
      * @example
      *   const certs = await client.general.findGiftCertificates({
@@ -619,16 +644,29 @@ declare class GeneralModule {
  *   yourself.
  */
 
+/**
+ * Filter + grouping for both ManagerApp endpoints.
+ *
+ * ⚠ The wire fields are the LISTS `DivisionIds` / `ArticleGroupIds`. The singular options are
+ * kept for compatibility and are sent as one-element lists (until v0.3 they were sent as
+ * singular fields and silently ignored by the server).
+ */
 interface SalesInformationCriteria {
     from: RecreatexDateTime;
     until: RecreatexDateTime;
+    divisionIds?: string[];
+    articleGroupIds?: string[];
+    /** Shorthand for `divisionIds: [id]`. */
     divisionId?: string;
+    /** Shorthand for `articleGroupIds: [id]`. */
     articleGroupId?: string;
     groupByDate?: boolean;
     groupByDivision?: boolean;
     groupByArticleGroup?: boolean;
 }
+/** Field names as the server sends them (`…ID`, verified 2026-10-24). */
 interface SalesInformationEntry {
+    id?: string | null;
     /** Gross amount. */
     amount: number;
     /** Net amount (without VAT). */
@@ -640,18 +678,17 @@ interface SalesInformationEntry {
     /** Populated when `groupByArticleGroup: true`. */
     articleGroupID?: string | null;
     /** Populated when `groupByDivision: true`. */
+    divisionID?: string | null;
+    /** @deprecated Never filled; the server sends `divisionID`. */
     divisionId?: string | null;
+    consolidationCodeItemID?: string | null;
+    consolidationCodeActivityID?: string | null;
+    consolidationCodeSalesID?: string | null;
 }
-interface VisitingCustomersCriteria {
-    from: RecreatexDateTime;
-    until: RecreatexDateTime;
-    divisionId?: string;
-    articleGroupId?: string;
-    groupByDate?: boolean;
-    groupByDivision?: boolean;
-    groupByArticleGroup?: boolean;
-}
+type VisitingCustomersCriteria = SalesInformationCriteria;
+/** Field names as the server sends them (`…ID`, verified 2026-10-25). */
 interface VisitingCustomersEntry {
+    id?: string | null;
     /** Total scans (NOT distinct guests). */
     totalVisitors: number;
     /** Subscription-card visits. */
@@ -660,7 +697,13 @@ interface VisitingCustomersEntry {
     saleVisitors: number;
     date?: string | null;
     articleGroupID?: string | null;
+    divisionID?: string | null;
+    /** @deprecated Never filled; the server sends `divisionID`. */
     divisionId?: string | null;
+    consolidationCodeItemID?: string | null;
+    consolidationCodeActivityID?: string | null;
+    /** ⚠ Singular `Sale` here, `Sales` in SalesInformationEntry; both as sent by the server. */
+    consolidationCodeSaleID?: string | null;
 }
 
 /**
@@ -934,4 +977,5 @@ declare function ymdWindow(before: number, after: number, today?: Date, tz?: str
  */
 declare function dedupSaleLines(sale: Pick<Sale, 'lines'>): SaleLine[];
 
-export { AccessZone, type AdjustOrganisedVisitInput, type Article, type ArticleGroup, type ArticleGroupRef, type ArticlePriceInformation, type ArticlePriceInformationCriteria, type ArticleSalesHistoryBucket, type ArticleSalesHistoryGroup, type ArticleSalesMatchMode, type ArticleSalesOrder, type ArticleSalesOrderType, type ArticleSalesReport, type ArticleSalesReportCriteria, type ArticleSalesReportLine, type ArticleVat, ArticlesModule, Basket, BasketItem, type CallOptions, type CancelOrganisedVisitInput, type CancelOrganisedVisitResult, CheckoutResponse, type ContextOptions, DigitalWallet, DigitalWalletIncludes, Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, type FetchLike, FindAccessZonesCriteria, type FindArticleSalesOrdersCriteria, type FindArticlesCriteria, type FindExpositionsCriteria, FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, FindPersonCardsCriteria, FindPersonCriteria, FindSalesCriteria, FindSalesPaging, GeneralModule, GetDigitalWalletsCriteria, type GetRebookingCostsInput, GiftCertificate, type GiftCertificatePdfRequest, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, type PaginateOptions, PaymentMethod, Person, PersonCard, PointOfSale, ReCreateXClient, type ReCreateXClientOptions, Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, type RetryOptions, STABLE_SESSION_ID, Sale, SaleLine, type SalesInformationCriteria, type SalesInformationEntry, type VisitingCustomersCriteria, type VisitingCustomersEntry, Ymd, buildContext, dayRangeDotted, dayRangeIso, dedupSaleLines, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+export { AccessZone, ArticlesModule, Basket, BasketItem, CheckoutResponse, DigitalWallet, DigitalWalletIncludes, Division, DocumentsModule, Exposition, ExpositionDayOverview, ExpositionPeriodDate, ExpositionPeriodRef, ExpositionsModule, FindAccessZonesCriteria, FindGiftCertificatesCriteria, FindOrganisedVisitsCriteria, FindPersonCardsCriteria, FindPersonCriteria, FindSalesCriteria, FindSalesPaging, GeneralModule, GetDigitalWalletsCriteria, GiftCertificate, ManagerModule, OrganisedVisit, OrganisedVisitPeriodTransfer, OrganisedVisitSaleAdjustment, OrganisedVisitTicketAdjustment, PaymentMethod, Person, PersonCard, PointOfSale, ReCreateXClient, Reader, RecreatexApiError, RecreatexContext, RecreatexDateTime, RecreatexEnvelope, RecreatexError, RecreatexHttpError, RecreatexTimeoutError, STABLE_SESSION_ID, Sale, SaleLine, Ymd, buildContext, dayRangeDotted, dayRangeIso, dedupSaleLines, isRetryableError, paginate, paginateIter, todayYmd, uuidv4, withRetry, ymd, ymdWindow };
+export type { AdjustOrganisedVisitInput, Article, ArticleGroup, ArticleGroupRef, ArticlePriceInformation, ArticlePriceInformationCriteria, ArticleSalesHistoryBucket, ArticleSalesHistoryGroup, ArticleSalesMatchMode, ArticleSalesOrder, ArticleSalesOrderType, ArticleSalesReport, ArticleSalesReportCriteria, ArticleSalesReportLine, ArticleVat, CallOptions, CancelOrganisedVisitInput, CancelOrganisedVisitResult, ContextOptions, FetchLike, FindArticleSalesOrdersCriteria, FindArticlesCriteria, FindExpositionsCriteria, GetRebookingCostsInput, GiftCertificatePdfRequest, PaginateOptions, ReCreateXClientOptions, RetryOptions, SalesInformationCriteria, SalesInformationEntry, VisitingCustomersCriteria, VisitingCustomersEntry };

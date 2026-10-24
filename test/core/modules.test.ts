@@ -46,7 +46,7 @@ describe('ArticlesModule', () => {
       includes: { group: true, barcodes: true, stock: true },
     });
     const body = calls[0]?.body as { SearchCriteria?: Record<string, unknown> } | null;
-    expect(body?.SearchCriteria?.ArticleID).toBe('article-1');
+    expect(body?.SearchCriteria?.ArticleId).toBe('article-1');
     expect(body?.SearchCriteria?.ArticleGroupId).toBe('group-1');
     expect(body?.SearchCriteria?.Barcode).toBe('400123456');
     expect(body?.SearchCriteria?.IncludeDetail).toBe(true);

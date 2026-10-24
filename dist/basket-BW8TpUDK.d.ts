@@ -333,23 +333,38 @@ interface PersonAddress {
     countryDescription?: string;
     telephone?: string;
 }
+/**
+ * A person from `General/FindPerson`. Field list read on 2026-10-25: the record carries `name`
+ * (no separate `firstName` / `lastName`), plus email, phones, address, credential, contacts,
+ * relations, company data and more (see `[extra]`).
+ */
 interface Person {
     id: string;
+    name?: string;
+    /** @deprecated Not part of the FindPerson record (2026-10-25); read `name`. */
     firstName?: string;
+    /** @deprecated Not part of the FindPerson record (2026-10-25); read `name`. */
     lastName?: string;
     email?: string;
     cellPhone?: string;
+    phone?: string;
     language?: string;
     credential?: PersonCredential;
     address?: PersonAddress;
     birthDate?: string;
+    externCustomerNumber?: string | null;
     [extra: string]: unknown;
 }
+/** Filters for `General/FindPerson`; at least one is required. */
 interface FindPersonCriteria {
     id?: string;
     email?: string;
     firstName?: string;
+    /** Surname / name (wire field `Name`). */
+    name?: string;
+    /** @deprecated Alias of `name`; the server has no `LastName` criterion. */
     lastName?: string;
+    /** Login name (wire field `UserName`). */
     username?: string;
 }
 /**
@@ -469,7 +484,13 @@ interface FindPersonCardsCriteria {
     id?: string;
     /** Card number as printed/encoded on the wristband. */
     number?: string;
+    /** Wire field `CardString`. */
+    cardString?: string;
     personId?: string;
+    /**
+     * @deprecated Not a server criterion: it was ignored (2026-10-25) and the call returned the
+     * unfiltered page. No longer sent; use `personId`.
+     */
     customerId?: string;
     pageIndex?: number;
     pageSize?: number;
@@ -610,9 +631,13 @@ interface GiftCertificate {
     printDate: string | null;
 }
 interface FindGiftCertificatesCriteria {
-    /** Recreatex Person GUID — typically the customer who placed the order. */
+    /** Recreatex Person GUID, typically the customer who placed the order. Filters server-side. */
     customerId?: string;
+    /** Filters server-side (wire field `Barcode`). */
+    barcode?: string;
+    /** ⚠ IGNORED by the server (2026-10-25); match `id` on the results yourself. */
     id?: string;
+    /** ⚠ IGNORED by the server (2026-10-25); match `number` on the results yourself. */
     number?: string;
     pageIndex?: number;
     pageSize?: number;
@@ -829,4 +854,5 @@ interface CheckoutResponse {
     result: CheckoutResult;
 }
 
-export { type OrganisedVisitPersonAddress as $, type AccessZone as A, type Basket as B, type CheckoutResponse as C, type Division as D, type Exposition as E, type FindOrganisedVisitsCriteria as F, type GiftCertificate as G, type ArticleSaleItem as H, type BasketPayment as I, type BasketTypeString as J, BasketTypeStrings as K, type BasketValidationResult as L, type CheckoutResult as M, type DigitalWalletTransaction as N, type OrganisedVisitTicketAdjustment as O, type PointOfSale as P, type DivisionCard as Q, type Reader as R, type Sale as S, type ExpositionPeriod as T, type ExpositionPeriodPrice as U, type ExpositionPeriodReservationEntry as V, type ExpositionPeriodReservationItem as W, type OrganisedVisitArticle as X, type Ymd as Y, type OrganisedVisitPeriodReservation as Z, type OrganisedVisitPerson as _, type OrganisedVisitSaleAdjustment as a, type OrganisedVisitRebookingItem as a0, type OrganisedVisitSaleGuest as a1, type OrganisedVisitSaleInfo as a2, type Paging as a3, type PersonAddress as a4, type PersonCredential as a5, type SalePaymentLine as a6, type ExpositionPeriodDate as b, type ExpositionDayOverview as c, type ExpositionPeriodRef as d, type OrganisedVisit as e, type OrganisedVisitPeriodTransfer as f, type FindAccessZonesCriteria as g, type PaymentMethod as h, type FindPersonCriteria as i, type Person as j, type FindSalesCriteria as k, type FindSalesPaging as l, type BasketItem as m, type FindGiftCertificatesCriteria as n, type FindPersonCardsCriteria as o, type PersonCard as p, type GetDigitalWalletsCriteria as q, type DigitalWallet as r, type DigitalWalletIncludes as s, type RecreatexDateTime as t, type RecreatexContext as u, type RecreatexEnvelope as v, type SaleLine as w, type AccessZoneOccupancy as x, type AccessZoneReader as y, type AnonymousPerson as z };
+export { BasketTypeStrings as K };
+export type { OrganisedVisitPersonAddress as $, AccessZone as A, Basket as B, CheckoutResponse as C, Division as D, Exposition as E, FindOrganisedVisitsCriteria as F, GiftCertificate as G, ArticleSaleItem as H, BasketPayment as I, BasketTypeString as J, BasketValidationResult as L, CheckoutResult as M, DigitalWalletTransaction as N, OrganisedVisitTicketAdjustment as O, PointOfSale as P, DivisionCard as Q, Reader as R, Sale as S, ExpositionPeriod as T, ExpositionPeriodPrice as U, ExpositionPeriodReservationEntry as V, ExpositionPeriodReservationItem as W, OrganisedVisitArticle as X, Ymd as Y, OrganisedVisitPeriodReservation as Z, OrganisedVisitPerson as _, OrganisedVisitSaleAdjustment as a, OrganisedVisitRebookingItem as a0, OrganisedVisitSaleGuest as a1, OrganisedVisitSaleInfo as a2, Paging as a3, PersonAddress as a4, PersonCredential as a5, SalePaymentLine as a6, ExpositionPeriodDate as b, ExpositionDayOverview as c, ExpositionPeriodRef as d, OrganisedVisit as e, OrganisedVisitPeriodTransfer as f, FindAccessZonesCriteria as g, PaymentMethod as h, FindPersonCriteria as i, Person as j, FindSalesCriteria as k, FindSalesPaging as l, BasketItem as m, FindGiftCertificatesCriteria as n, FindPersonCardsCriteria as o, PersonCard as p, GetDigitalWalletsCriteria as q, DigitalWallet as r, DigitalWalletIncludes as s, RecreatexDateTime as t, RecreatexContext as u, RecreatexEnvelope as v, SaleLine as w, AccessZoneOccupancy as x, AccessZoneReader as y, AnonymousPerson as z };

@@ -155,7 +155,9 @@ var ArticlesModule = class {
         PageSize: criteria.pageSize ?? 50
       },
       Includes: {
-        Price: criteria.includes?.price ?? true,
+        // ⚠ The wire flag is `Price`; `PriceInfo` does not exist and loaded nothing (price 0
+        // when sent alone, verified 2026-10-25). `priceInfo` stays as an alias.
+        Price: criteria.includes?.price ?? criteria.includes?.priceInfo ?? true,
         ImageUrl: criteria.includes?.imageUrl ?? true,
         ...criteria.includes?.image !== void 0 && { Image: criteria.includes.image },
         ...criteria.includes?.group !== void 0 && { Group: criteria.includes.group },
@@ -168,14 +170,12 @@ var ArticlesModule = class {
         ...criteria.includes?.saleArticles !== void 0 && { SaleArticles: criteria.includes.saleArticles },
         ...criteria.includes?.rentArticles !== void 0 && { RentArticles: criteria.includes.rentArticles },
         ...criteria.includes?.freeArticles !== void 0 && { FreeArticles: criteria.includes.freeArticles },
-        Translations: criteria.includes?.translations ?? false,
-        ...criteria.includes?.priceInfo !== void 0 && { PriceInfo: criteria.includes.priceInfo }
+        Translations: criteria.includes?.translations ?? false
       }
     };
-    if (criteria.articleId) SearchCriteria.ArticleID = criteria.articleId;
+    if (criteria.articleId) SearchCriteria.ArticleId = criteria.articleId;
     if (criteria.articleGroupId) SearchCriteria.ArticleGroupId = criteria.articleGroupId;
     if (criteria.namePattern) SearchCriteria.NamePattern = criteria.namePattern;
-    if (criteria.code) SearchCriteria.Code = criteria.code;
     if (criteria.barcode) SearchCriteria.Barcode = criteria.barcode;
     if (criteria.divisionId) SearchCriteria.DivisionId = criteria.divisionId;
     if (criteria.includeDetail !== void 0) SearchCriteria.IncludeDetail = criteria.includeDetail;
@@ -203,10 +203,13 @@ var ArticlesModule = class {
       pageSize: criteria.pageSize ?? 50,
       ...paginateOpts
     };
-    return paginate(
+    const alle = await paginate(
       ({ pageIndex, pageSize }) => this.findArticlesPage({ ...criteria, pageIndex, pageSize }, callOpts),
       pageOptions
     );
+    if (!criteria.code) return alle;
+    const code = criteria.code.trim().toLowerCase();
+    return alle.filter((a) => String(a.code ?? "").trim().toLowerCase() === code);
   }
   /** Fetch a single article by GUID. */
   async findArticleById(articleId, callOpts) {
@@ -320,7 +323,8 @@ var ArticlesModule = class {
         divisionId: criteria.divisionId,
         includes: { price: true, imageUrl: true, vat: true, group: true }
       },
-      { pageSize: criteria.pageSize ?? 50, maxPages: 5 },
+      // Enough for the whole catalogue (156 articles on 2026-10-25); `code` is matched locally.
+      { pageSize: criteria.pageSize ?? 50, maxPages: 40 },
       callOpts
     );
     if (matches.length === 0) {
@@ -811,19 +815,32 @@ var GeneralModule = class {
     );
     return data.paymentMethods ?? [];
   }
-  /** Look up persons. Provide at least one filter. */
+  /**
+   * Look up persons. At least one filter is required.
+   *
+   * ⚠⚠ Fixed in v0.4 (verified 2026-10-25): the server answers `{ result: Person[] }`, and the
+   * SDK read `persons` / `result.persons`, so this method ALWAYS returned `[]`. And `LastName`
+   * is not a server criterion: it was ignored and the call returned an unfiltered page (50
+   * arbitrary persons). The surname goes into `Name`. A call without any filter is rejected
+   * here for the same reason: it would return arbitrary persons.
+   */
   async findPerson(criteria, callOpts) {
     const Criteria = {};
     if (criteria.id) Criteria.Id = criteria.id;
     if (criteria.email) Criteria.Email = criteria.email;
     if (criteria.firstName) Criteria.FirstName = criteria.firstName;
-    if (criteria.lastName) Criteria.LastName = criteria.lastName;
-    if (criteria.username) Criteria.Username = criteria.username;
+    const name = criteria.name ?? criteria.lastName;
+    if (name) Criteria.Name = name;
+    if (criteria.username) Criteria.UserName = criteria.username;
+    if (Object.keys(Criteria).length === 0) {
+      throw new Error("findPerson: provide at least one filter (id, email, firstName, name, username)");
+    }
     const data = await this.client.post(
       "Json/General/FindPerson",
       { Criteria },
       callOpts ?? {}
     );
+    if (Array.isArray(data.result)) return data.result;
     return data.persons ?? data.result?.persons ?? [];
   }
   /**
@@ -940,7 +957,14 @@ var GeneralModule = class {
   }
   // ---- Gift certificates -----------------------------------------------
   /**
-   * Find gift certificates, e.g. by customer or by id. Newest first.
+   * Find gift certificates of a customer, one page. Newest first.
+   *
+   * ⚠⚠ The server filters only by `CustomerId` and `Barcode`. `Id` and `Number` are not server
+   * criteria and are IGNORED: a call with an id returned the whole page (50 of 50, verified
+   * 2026-10-25). Match `id` / `number` / `salesSeriesID` yourself on the returned records, and
+   * page through until you find it. This method deliberately does NOT filter locally: callers
+   * page with `pageIndex` and stop at a short page, and a filtered page would stop them early
+   * (spma-relaunch-2026 does exactly that).
    *
    * @example
    *   const certs = await client.general.findGiftCertificates({
@@ -956,6 +980,7 @@ var GeneralModule = class {
       }
     };
     if (criteria.customerId) Criteria.CustomerId = criteria.customerId;
+    if (criteria.barcode) Criteria.Barcode = criteria.barcode;
     if (criteria.id) Criteria.Id = criteria.id;
     if (criteria.number) Criteria.Number = criteria.number;
     const data = await this.client.post(
@@ -995,8 +1020,8 @@ var GeneralModule = class {
     };
     if (criteria.id) Criteria.Id = criteria.id;
     if (criteria.number) Criteria.Number = criteria.number;
+    if (criteria.cardString) Criteria.CardString = criteria.cardString;
     if (criteria.personId) Criteria.PersonId = criteria.personId;
-    if (criteria.customerId) Criteria.CustomerId = criteria.customerId;
     const data = await this.client.post(
       "Json/General/FindPersonCards",
       { Criteria },
@@ -1060,6 +1085,23 @@ var GeneralModule = class {
 };
 
 // src/core/modules/manager.ts
+function managerFilter(criteria) {
+  const Criteria = {
+    From: criteria.from,
+    Until: criteria.until
+  };
+  const divisionIds = [...criteria.divisionIds ?? [], ...criteria.divisionId ? [criteria.divisionId] : []];
+  const articleGroupIds = [
+    ...criteria.articleGroupIds ?? [],
+    ...criteria.articleGroupId ? [criteria.articleGroupId] : []
+  ];
+  if (divisionIds.length) Criteria.DivisionIds = divisionIds;
+  if (articleGroupIds.length) Criteria.ArticleGroupIds = articleGroupIds;
+  if (criteria.groupByDate) Criteria.GroupByDate = true;
+  if (criteria.groupByDivision) Criteria.GroupByDivision = true;
+  if (criteria.groupByArticleGroup) Criteria.GroupByArticleGroup = true;
+  return Criteria;
+}
 var ManagerModule = class {
   constructor(client) {
     this.client = client;
@@ -1067,15 +1109,7 @@ var ManagerModule = class {
   client;
   /** Aggregated revenue. Combine `groupBy*` flags as needed. */
   async listSalesInformation(criteria, callOpts) {
-    const Criteria = {
-      From: criteria.from,
-      Until: criteria.until
-    };
-    if (criteria.divisionId) Criteria.DivisionId = criteria.divisionId;
-    if (criteria.articleGroupId) Criteria.ArticleGroupId = criteria.articleGroupId;
-    if (criteria.groupByDate) Criteria.GroupByDate = true;
-    if (criteria.groupByDivision) Criteria.GroupByDivision = true;
-    if (criteria.groupByArticleGroup) Criteria.GroupByArticleGroup = true;
+    const Criteria = managerFilter(criteria);
     const data = await this.client.post(
       "Json/ManagerApp/ListSalesInformation",
       { Criteria },
@@ -1090,15 +1124,7 @@ var ManagerModule = class {
    * `today: true` and persist `visitorsToday` yourself.
    */
   async listVisitingCustomersInformation(criteria, callOpts) {
-    const Criteria = {
-      From: criteria.from,
-      Until: criteria.until
-    };
-    if (criteria.divisionId) Criteria.DivisionId = criteria.divisionId;
-    if (criteria.articleGroupId) Criteria.ArticleGroupId = criteria.articleGroupId;
-    if (criteria.groupByDate) Criteria.GroupByDate = true;
-    if (criteria.groupByDivision) Criteria.GroupByDivision = true;
-    if (criteria.groupByArticleGroup) Criteria.GroupByArticleGroup = true;
+    const Criteria = managerFilter(criteria);
     const data = await this.client.post(
       "Json/ManagerApp/ListVisitingCustomersInformation",
       { Criteria },

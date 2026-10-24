@@ -60,17 +60,23 @@ export interface ArticleGroup {
 
 /** Search input for `Articles/FindArticles`. */
 export interface FindArticlesCriteria {
-  /** Exact article GUID. Wire name is `ArticleID` in the Recreatex docs. */
+  /** Exact article GUID (wire name `ArticleId`). */
   articleId?: string;
   /** Restrict to an article group GUID. */
   articleGroupId?: string;
   /** Substring match on article name. */
   namePattern?: string;
-  /** Exact code match. */
+  /**
+   * Exact code match, applied LOCALLY by `findArticles` after paging. The server has no code
+   * criterion (it returned every article for one, 2026-10-25); `findArticlesPage` ignores it.
+   */
   code?: string;
   /** Exact barcode match. */
   barcode?: string;
-  /** Restrict to a division (e.g. `DIVISION_IDS.spaceMagic`). */
+  /**
+   * ⚠ Not a documented SearchCriteria field; had no effect in a test on 2026-10-25. Set the
+   * client option `divisionId` (Context) if you need a division.
+   */
   divisionId?: string;
   /** Include article options, ingredients and warehouses. */
   includeDetail?: boolean;
@@ -100,6 +106,7 @@ export interface FindArticlesCriteria {
     rentArticles?: boolean;
     freeArticles?: boolean;
     translations?: boolean;
+    /** @deprecated No such wire flag; treated as an alias of `price`. */
     priceInfo?: boolean;
   };
 }
@@ -114,6 +121,9 @@ export interface ArticlePriceInformation {
   priceGroup?: string | null;
   familyComposition?: string | null;
   subsidizationPrice?: string | number | null;
+  /** Wire name verified 2026-10-25 (`additional…`, not `addition…`). */
+  additionalSupplementPrice?: number | null;
+  /** @deprecated Misspelt in v0.3 and never filled; use `additionalSupplementPrice`. */
   additionSupplementPrice?: number | null;
   donationPrice?: number | null;
   [extra: string]: unknown;

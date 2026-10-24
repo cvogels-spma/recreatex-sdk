@@ -1,4 +1,4 @@
-import { e as OrganisedVisit, Q as OrganisedVisitArticle, T as OrganisedVisitPeriodReservation, B as Basket, S as Sale } from './basket-DtlswspG.js';
+import { e as OrganisedVisit, X as OrganisedVisitArticle, Z as OrganisedVisitPeriodReservation, B as Basket, S as Sale } from './basket-DB0OLSPh.js';
 
 /**
  * Space Magic-specific GUIDs and constants.

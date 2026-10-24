@@ -440,20 +440,23 @@ interface FindSalesPaging {
  * and by whether a person is attached.
  *
  * Field list verified against production on 2026-07-27: `$type`, `id`,
- * `description`, `card`, `personId`, `person`.
+ * `description`, `card`, `personId`, `person`. On 2026-10-24 the full list was
+ * read (14,363 records): `card` is an OBJECT ({@link DivisionCard}), not a
+ * string, and the description is the ticket loaded onto the card
+ * (`4h Eintritt Kinder - 2026`, `Partypaket - Pilot`, `Mitarbeiterband`, …).
  *
- * ⚠ **There is no balance field.** The stored value of an RFID wristband lives
- * in the Gantner purse and is not reachable through this API — no endpoint
- * exposes it (see `docs/ENDPOINTS.md`). Do not promise "remaining credit" to a
- * caller based on this record.
+ * ⚠ **This record has no balance field.** The balance of a wristband lives in
+ * its wallet: {@link GeneralModule.getDigitalWallets} /
+ * {@link GeneralModule.getDigitalWallet} (`docs/ENDPOINTS.md`). Until
+ * 2026-10-24 this comment said the balance was unreachable; that was wrong.
  *
  * ⚠ This endpoint also has no "currently open / checked in" filter, so it
- * cannot enumerate the bands still inside the park.
+ * cannot enumerate the bands still inside the park. Neither can the wallets.
  */
 interface PersonCard {
     id: string;
-    /** Card number as encoded on the wristband. */
-    card?: string | null;
+    /** The physical (or generated) card behind this record. */
+    card?: DivisionCard | null;
     /** Plain-text label of the card. */
     description?: string | null;
     /** Attached person, when the card is not anonymous. */
@@ -470,6 +473,117 @@ interface FindPersonCardsCriteria {
     customerId?: string;
     pageIndex?: number;
     pageSize?: number;
+}
+/**
+ * A division card: the medium behind a {@link PersonCard} or a
+ * {@link DigitalWallet}. Shape verified 2026-10-24 (`FindPersonCards`,
+ * `GetCard`).
+ */
+interface DivisionCard {
+    id: string;
+    /** The encoded number, e.g. a Gantner 7-byte UID like `04787CC28C1E91`. */
+    cardNumber?: string | null;
+    number?: string | null;
+    /**
+     * How the number is read. `GANTNER 7 BYTE UID` = a physical RFID wristband,
+     * `RANDOM` = a generated ticket number (Space Magic: 13,980 of 14,363).
+     */
+    peripheralString?: {
+        id?: string;
+        code?: string | null;
+        description?: string | null;
+    } | null;
+    personCards?: PersonCard[];
+    [extra: string]: unknown;
+}
+/**
+ * One line of a wallet booking.
+ *
+ * ⚠ `id` is the BOOKING, not the line: all lines of one booking (a menu and its
+ * components) share it.
+ *
+ * ⚠⚠ `amount` (the wallet effect) is NOT reliably per line. For a menu every
+ * line repeats the booking total (Burger Menü 4.95 + surcharge 0.30 → −5.25 on
+ * each of four lines); for two identical surcharge lines each carries its own
+ * −5 and the balance is −10. Never sum it; use {@link DigitalWallet.balance}
+ * for money and `salesLineAmount` to show what was bought.
+ */
+interface DigitalWalletTransaction {
+    id: string;
+    creationDate?: string | null;
+    /** Park-local time WITHOUT zone (`2026-10-22T16:31:50`). Do not parse as UTC. */
+    date?: string | null;
+    /**
+     * Bon number. `0` = booked onto the band at a till (gastro, add-ons) and not
+     * paid yet. Paid postings disappear from the wallet when the guest settles at
+     * the exit; what stays was never paid.
+     */
+    salesNo?: number | null;
+    amount?: number | null;
+    itemDescription?: string | null;
+    salesLineQuantity?: number | null;
+    salesLineUnitPriceInc?: number | null;
+    /** Line amount incl. VAT. */
+    salesLineAmount?: number | null;
+    /** `Hauskredit`, `BARZAHLUNG`, `VISA`, …; empty for open postings. */
+    paymentMethod?: string | null;
+    salesLineId?: string | null;
+    [extra: string]: unknown;
+}
+/**
+ * The wallet of one wristband, from `General/GetDigitalWallets` /
+ * `General/GetDigitalWallet`. Verified 2026-10-24 against 3,090 production
+ * wallets (one per physical band).
+ *
+ * ⚠ It does NOT tell whether the band is inside the park: a check-in on a
+ * reused band writes no transaction. Only issuing a band for the first time
+ * and bookings onto it do.
+ */
+interface DigitalWallet {
+    id: string;
+    /** Negative = owed by the band (unpaid postings). The authoritative money figure. */
+    balance: number;
+    creditLimit?: number | null;
+    isCreditLimitActivated?: boolean;
+    /** Only filled with `includes.transactions`. */
+    transactions?: DigitalWalletTransaction[];
+    /** The band's number (Gantner UID). */
+    cardNumber?: string | null;
+    cardId?: string | null;
+    /** The customer the band was issued under (often a walk-in/webshop collective customer). */
+    personId?: string | null;
+    transactionBalance?: number | null;
+    linkedCards?: Array<{
+        id: string;
+        cardNumber?: string | null;
+        number?: string | null;
+    }> | null;
+    /** Wallet article: `Hauskredit Erwachsene`, `Geburtstags Wallet`, `Mitarbeiter`, `Digital Wallet`, … */
+    articleDescription?: string | null;
+    overstayCharges?: unknown[] | null;
+    cardBlocked?: boolean;
+    lockedForPayout?: boolean;
+    salesRegistrationMode?: number;
+    [extra: string]: unknown;
+}
+interface DigitalWalletIncludes {
+    /** Wallet transactions (open postings, issue line). Default false: ~2× the payload. */
+    transactions?: boolean;
+    linkedCards?: boolean;
+    /** ⚠ Not a reliable "today" filter in practice; leave it off. */
+    onlyTransactionsToday?: boolean;
+    /** 0 € lines (menu components, the issue line). */
+    zeroAmountLines?: boolean;
+    cancelledRecords?: boolean;
+}
+interface GetDigitalWalletsCriteria {
+    /**
+     * Only this person's wallets. ⚠ Leave it out to get ALL wallets (Space
+     * Magic 2026-10-24: 3,090 over 157 persons, the two collective customers alone
+     * 2,533). `null` is rejected by the server (HTTP 500, "cast to System.Guid").
+     */
+    personId?: string;
+    includes?: DigitalWalletIncludes;
 }
 /**
  * A single gift-certificate record as returned by `FindGiftCertificates`.
@@ -715,4 +829,4 @@ interface CheckoutResponse {
     result: CheckoutResult;
 }
 
-export { type PersonAddress as $, type AccessZone as A, type Basket as B, type CheckoutResponse as C, type Division as D, type Exposition as E, type FindOrganisedVisitsCriteria as F, type GiftCertificate as G, BasketTypeStrings as H, type BasketValidationResult as I, type CheckoutResult as J, type ExpositionPeriod as K, type ExpositionPeriodPrice as L, type ExpositionPeriodReservationEntry as M, type ExpositionPeriodReservationItem as N, type OrganisedVisitTicketAdjustment as O, type PointOfSale as P, type OrganisedVisitArticle as Q, type Reader as R, type Sale as S, type OrganisedVisitPeriodReservation as T, type OrganisedVisitPerson as U, type OrganisedVisitPersonAddress as V, type OrganisedVisitRebookingItem as W, type OrganisedVisitSaleGuest as X, type Ymd as Y, type OrganisedVisitSaleInfo as Z, type Paging as _, type OrganisedVisitSaleAdjustment as a, type PersonCredential as a0, type SalePaymentLine as a1, type ExpositionPeriodDate as b, type ExpositionDayOverview as c, type ExpositionPeriodRef as d, type OrganisedVisit as e, type OrganisedVisitPeriodTransfer as f, type FindAccessZonesCriteria as g, type PaymentMethod as h, type FindPersonCriteria as i, type Person as j, type FindSalesCriteria as k, type FindSalesPaging as l, type BasketItem as m, type FindGiftCertificatesCriteria as n, type FindPersonCardsCriteria as o, type PersonCard as p, type RecreatexDateTime as q, type RecreatexContext as r, type RecreatexEnvelope as s, type SaleLine as t, type AccessZoneOccupancy as u, type AccessZoneReader as v, type AnonymousPerson as w, type ArticleSaleItem as x, type BasketPayment as y, type BasketTypeString as z };
+export { type OrganisedVisitPersonAddress as $, type AccessZone as A, type Basket as B, type CheckoutResponse as C, type Division as D, type Exposition as E, type FindOrganisedVisitsCriteria as F, type GiftCertificate as G, type ArticleSaleItem as H, type BasketPayment as I, type BasketTypeString as J, BasketTypeStrings as K, type BasketValidationResult as L, type CheckoutResult as M, type DigitalWalletTransaction as N, type OrganisedVisitTicketAdjustment as O, type PointOfSale as P, type DivisionCard as Q, type Reader as R, type Sale as S, type ExpositionPeriod as T, type ExpositionPeriodPrice as U, type ExpositionPeriodReservationEntry as V, type ExpositionPeriodReservationItem as W, type OrganisedVisitArticle as X, type Ymd as Y, type OrganisedVisitPeriodReservation as Z, type OrganisedVisitPerson as _, type OrganisedVisitSaleAdjustment as a, type OrganisedVisitRebookingItem as a0, type OrganisedVisitSaleGuest as a1, type OrganisedVisitSaleInfo as a2, type Paging as a3, type PersonAddress as a4, type PersonCredential as a5, type SalePaymentLine as a6, type ExpositionPeriodDate as b, type ExpositionDayOverview as c, type ExpositionPeriodRef as d, type OrganisedVisit as e, type OrganisedVisitPeriodTransfer as f, type FindAccessZonesCriteria as g, type PaymentMethod as h, type FindPersonCriteria as i, type Person as j, type FindSalesCriteria as k, type FindSalesPaging as l, type BasketItem as m, type FindGiftCertificatesCriteria as n, type FindPersonCardsCriteria as o, type PersonCard as p, type GetDigitalWalletsCriteria as q, type DigitalWallet as r, type DigitalWalletIncludes as s, type RecreatexDateTime as t, type RecreatexContext as u, type RecreatexEnvelope as v, type SaleLine as w, type AccessZoneOccupancy as x, type AccessZoneReader as y, type AnonymousPerson as z };

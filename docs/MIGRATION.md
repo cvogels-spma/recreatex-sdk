@@ -1,7 +1,30 @@
 # Migration guide
 
-Three Space Magic projects currently call Recreatex directly. This guide
-shows how to swap each over to `recreatex-sdk`.
+## Upgrading to 0.4.0 (from 0.2.x / `537a7ad`, or from `dc0e7a4`)
+
+Most changes make a call return CORRECT data where it silently returned wrong data. That is
+still a behaviour change for the caller. Check each point that your code touches.
+
+| Change | Who is affected | What to do |
+|---|---|---|
+| `general.findSales()` returns ALL bons of the window (paginated), not the latest ten | Every caller. spma-relaunch-2026 `findeVerkaufsnummer` gains bons it never saw | Nothing, unless you relied on the ten. Use `dedupSaleLines()` before summing lines. |
+| `general.findPerson()` returns persons (was always `[]`); `lastName` is sent as `Name`; no filter → throws | Any caller of `findPerson` | Read `name` (no `firstName`/`lastName` in the record). Make sure a filter is set. |
+| ManagerApp `divisionId` / `articleGroupId` now FILTER (were ignored) | Callers of `listSalesInformation` / `listVisitingCustomersInformation` that pass them | Expect filtered totals. Read `divisionID` (not `divisionId`) on the entries. |
+| `articles.findArticles({ code })` returns only that code (returned all) | Callers passing `code` | `findArticlesPage({ code })` still returns the unfiltered page. |
+| `PersonCard.card` is a `DivisionCard` object (`card.cardNumber`), not a string | TypeScript callers of `findPersonCards` | Read `card?.cardNumber`. |
+| `findPersonCards({ customerId })` no longer sends it (it was ignored) | Callers passing `customerId` | Use `personId`. |
+| `ArticlePriceInformation.additionalSupplementPrice` | Callers reading `additionSupplementPrice` (never filled) | Read the new field. |
+| `findGiftCertificates({ id / number })`: unchanged, but now documented as ignored by the server | Callers expecting one match | Page and match yourself (as spma-relaunch-2026 already does). |
+
+Known consumers (2026-10-25): spma-relaunch-2026 (unpinned `github:` spec, lockfile on
+`537a7ad`: picks up 0.4.0 on the next lockfile refresh), spma-dashboard and spma-order (pinned
+`dc0e7a4`, unaffected until they bump), spma-app worker and the older landing pages
+(unpinned). Before refreshing a lockfile, search the project for the calls in the table.
+
+## Historic: moving the Space Magic projects to the SDK (2026-04/05)
+
+Three Space Magic projects called Recreatex directly at the time. This guide
+shows how each was swapped over to `recreatex-sdk`.
 
 ## 1. space-magic-birthday-landing-page
 

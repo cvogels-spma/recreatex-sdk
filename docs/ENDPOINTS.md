@@ -7,18 +7,25 @@ this for you).
 Base URL: `https://wsdlspacemagic.recreatex.be`. The document service
 sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 
+All 34 wire paths below were checked against the server's endpoint list on 2026-10-25
+(`/json/documentation`, name and namespace), and every read wrapper ran against the live
+API (`npm run smoke`).
+
 | Module | Method on `client.*` | Wire path | Use case |
 |---|---|---|---|
-| `articles` | `findArticles(criteria)` | `/Json/Articles/FindArticles/` | Catalogue (auto-pages) |
-| `articles` | `findArticlesPage(criteria)` | `/Json/Articles/FindArticles/` | Single page |
+| `articles` | `findArticles(criteria)` | `/Json/Articles/FindArticles/` | Catalogue (auto-pages). `code` is matched locally, the server has no code criterion |
+| `articles` | `findArticlesPage(criteria)` | `/Json/Articles/FindArticles/` | Single page, unfiltered by `code` |
+| `articles` | `findArticleById(id)` | `/Json/Articles/FindArticles/` | One article |
 | `articles` | `listArticleGroups()` | `/Json/Articles/ListArticleGroups/` | Group taxonomy |
 | `articles` | `getArticlePriceInformation({ articleId })` | `/Json/Articles/GetArticlePriceInformation/` | Detailed current price |
-| `articles` | `findArticleSalesOrders(criteria)` | `/Json/Articles/FindArticleSalesOrders/` | Sold article line history |
+| `articles` | `findArticleSalesOrders(criteria)` | `/Json/Articles/FindArticleSalesOrders/` | Sold article lines with code, auto-pages, no duplicate lines |
+| `articles` | `findArticleSalesOrdersPage(criteria)` | `/Json/Articles/FindArticleSalesOrders/` | Single page |
 | `articles` | `getArticleSalesReport(criteria)` | composed | Article dossier: price, sold quantity, revenue, history |
 | `expositions` | `findExpositions(criteria)` | `/Json/Expositions/FindExpositions/` | Rooms by name |
 | `expositions` | `findPeriodDates(id, fromIso, untilIso)` | `/Json/Expositions/FindExpositionPeriodDates/` | Free days |
-| `expositions` | `findOverviewByDay(id, ymd)` | `/Json/Expositions/FindExpositionOverviewByDay/` | Slots + capacity (no period id!) |
-| `expositions` | `listPeriods(id, fromIso, untilIso)` | `/Json/Expositions/ListExpositionPeriods/` | Slots **with** period id (use for basket builds) |
+| `expositions` | `findOverviewByDay(id, ymd)` | `/Json/Expositions/FindExpositionOverviewByDay/` | Slots + capacity (no period id!). Takes `YYYY-MM-DD`; a timestamp gives HTTP 500 |
+| `expositions` | `listPeriods(id, fromIso, untilIso)` | `/Json/Expositions/ListExpositionPeriods/` | Slots **with** period id (use for basket builds), auto-pages |
+| `expositions` | `listPeriodsPage(id, fromIso, untilIso)` | `/Json/Expositions/ListExpositionPeriods/` | Single page |
 | `expositions` | `findOrganisedVisits(criteria)` | `/Json/Expositions/FindOrganisedVisits/` | Bookings (auto-pages) |
 | `expositions` | `findOrganisedVisitsPage(criteria)` | `/Json/Expositions/FindOrganisedVisits/` | Single page |
 | `expositions` | `adjustOrganisedVisit(input)` | `/Json/Expositions/AdjustOrganisedVisit/` | Change quantities |
@@ -29,8 +36,8 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `general` | `listDivisions()` | `/Json/General/ListDivisions/` | Divisions |
 | `general` | `getPointOfSales()` | `/Json/General/GetPointOfSales/` | POS terminals |
 | `general` | `listPaymentMethods()` | `/Json/General/ListPaymentMethods/` | 32 payment methods |
-| `general` | `findPerson(criteria)` | `/Json/General/FindPerson/` | Person lookup |
-| `general` | `findSales(criteria, callOpts?, paginateOpts?)` | `/Json/General/FindSales/` | All bons of the window, paginated (500/page; throws at the page cap). Check-in, Nachzahlautomat, Drehkreuz, Backoffice, Nachrutsche; NOT the F&B tills or the QR order app |
+| `general` | `findPerson(criteria)` | `/Json/General/FindPerson/` | Person lookup by id, email, first name, name, login. At least one filter |
+| `general` | `findSales(criteria, callOpts?, paginateOpts?)` | `/Json/General/FindSales/` | All bons of the window, paginated (500/page; throws at the page cap). See "What FindSales covers" below |
 | `general` | `findSalesPage(criteria, paging, callOpts?)` | `/Json/General/FindSales/` | One page; `Paging` goes inside `Criteria` |
 | `general` | `reCalculateBasket(basket)` | `/Json/General/ReCalculateBasket/` | Basket totals |
 | `general` | `lockBasketItems(items)` | `/Json/General/LockBasketItems/` | Reserve items for payment |
@@ -38,10 +45,10 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | `general` | `findPersonCards(criteria)` | `/Json/General/FindPersonCards/` | Cards / RFID wristbands (`card` is an object, see below) |
 | `general` | `getDigitalWallets(criteria)` | `/Json/General/GetDigitalWallets/` | Wallet per wristband: balance + open postings (all wallets without `personId`) |
 | `general` | `getDigitalWallet(cardNumber)` | `/Json/General/GetDigitalWallet/` | One wristband's wallet, `null` if unknown |
-| `general` | `findGiftCertificates(criteria)` | `/Json/General/FindGiftCertificates/` | Look up gift certificates by customer / id / number |
+| `general` | `findGiftCertificates(criteria)` | `/Json/General/FindGiftCertificates/` | One page of a customer's gift certificates (filters: customer, barcode; `id`/`number` are ignored by the server) |
 | `general` | `setGiftCertificatePrinted(id)` | `/Json/General/SetGiftCertificatePrinted/` | Mark a cert as delivered (sets `printDate`) |
-| `manager` | `listSalesInformation(criteria)` | `/Json/ManagerApp/ListSalesInformation/` | Aggregated revenue |
-| `manager` | `listVisitingCustomersInformation(criteria)` | `/Json/ManagerApp/ListVisitingCustomersInformation/` | Visitor scans |
+| `manager` | `listSalesInformation(criteria)` | `/Json/ManagerApp/ListSalesInformation/` | Aggregated revenue; filters `divisionIds`, `articleGroupIds` |
+| `manager` | `listVisitingCustomersInformation(criteria)` | `/Json/ManagerApp/ListVisitingCustomersInformation/` | Visitor scans; same filters |
 | `documents` | `giftCertificatePdf({ salesLineId })` | `/WebShopDocumentService.svc/GiftCertificates/{ShopId}/{lang}/{SalesLineId}` | Voucher PDF |
 | `documents` | `giftCertificateHelp(lang)` | `/WebShopDocumentService.svc/Help/GiftCertificates/{ShopId}/{lang}` | Template merge-fields |
 
@@ -52,6 +59,48 @@ sits at `${baseUrl}/WebShopDocumentService.svc/...` and uses **GET**.
 | Manager / General / Articles | `"YYYY-MM-DD HH:mm:ss.SSS"` | `dayRangeDotted()` |
 | Expositions | `"YYYY-MM-DDTHH:mm:ss"` | `dayRangeIso()` |
 
+## Request fields the server ignores (verified 2026-10-25)
+
+Recreatex answers an unknown criterion with the UNFILTERED result, not with an error. These
+were all sent by earlier SDK versions:
+
+| Call | Ignored field | What came back | Since 0.4.0 |
+|---|---|---|---|
+| `FindPerson` | `LastName` | 50 arbitrary persons | sent as `Name` |
+| `FindPerson` | (response) | `{ result: Person[] }`, the SDK read `persons` → always `[]` | fixed |
+| `ListSalesInformation`, `ListVisitingCustomersInformation` | `DivisionId`, `ArticleGroupId` (singular) | whole-day totals (socks group: 16,465.51 € instead of 792.51 €) | sent as lists `DivisionIds`, `ArticleGroupIds` |
+| `FindArticles` | `Code` | every article | matched locally in `findArticles` |
+| `FindArticles` | `Includes.PriceInfo` | no price (0) | alias of `Includes.Price` |
+| `FindArticles` | `DivisionId` (SearchCriteria) | no effect | documented only |
+| `FindPersonCards` | `CustomerId` | unfiltered page | no longer sent; use `personId` |
+| `FindGiftCertificates` | `Id`, `Number` | the customer's whole page | still sent, documented; match on the records yourself |
+
+Field names are case-insensitive on the server (`ArticleID` and `ArticleId` both work), but
+the SDK sends the documented spelling.
+
+## What FindSales covers
+
+On 2026-10-24 the day's `FindSales` lines (16,551.51 €) and `FindArticleSalesOrders`
+(type `All`, 16,465.51 €) matched `ListSalesInformation` (16,465.51 €) within 0.5 %.
+
+- Gastro booked onto a wristband is not a bon at the F&B till. It appears on the EXIT bon
+  (Nachzahlautomat or check-in desk) when the guest settles. Open postings live in the
+  wallet (`getDigitalWallets`).
+- ⚠ Webshop payments (bons that carry only `Ausstellung Vorauszahlung`, paid by PayPal,
+  Klarna, card) are posted on the POS **"Nachzahlautomat"**. Split bons by their content,
+  not by POS: on 2026-10-24, 4,218.75 € of the day were webshop payments, 9,035.30 € check-in
+  bons (those that issue a wristband), 3,297.46 € exit and desk.
+- Lines come back duplicated (same `id`): use `dedupSaleLines()`.
+- A bon carries no wristband reference.
+
+## Article sales orders: type `All` vs `Sales`
+
+`FindArticleSalesOrders` takes a numeric `Type`; the SDK maps names. On 2026-10-24:
+`All` (0) 5,313 lines / 16,465.51 €, `Sales` (1) 2,495 lines / 13,534.12 €. `Sales` leaves
+out package components (e.g. `Anteil Park 4h WE` from birthday packages, 2,408.39 €),
+single entries, gift certificates and the 0-€ attraction entitlements. For gastro articles
+both are the same. Use `All` when the total must match the till.
+
 ## Pagination
 
 Endpoints that accept `Paging: { PageIndex, PageSize }`:
@@ -59,9 +108,12 @@ Endpoints that accept `Paging: { PageIndex, PageSize }`:
 - `Articles/FindArticleSalesOrders`
 - `Expositions/FindExpositions`
 - `Expositions/FindOrganisedVisits`
+- `Expositions/ListExpositionPeriods`
+- `General/FindSales` (inside `Criteria`)
+- `General/FindPersonCards`, `General/FindGiftCertificates`, `General/FindPerson`
 
 The SDK exposes both `findXyz()` (auto-pages) and `findXyzPage()` (single
-page). Default `PageSize`: 200 for visits/article sales orders, 50 for
+page). Default `PageSize`: 500 for sales, 200 for visits/article sales orders, 50 for
 articles/expositions.
 
 ## Article-level sales
@@ -82,12 +134,12 @@ console.log(report.totals.totalPrice);     // gross line total
 console.log(report.history);               // daily buckets by default
 ```
 
-`FindArticleSalesOrders` returns sold article lines with description/date/
-quantity/unit price/total price. The public Recreatex PDF documents it as an
-article history endpoint; if the JSON response includes article ids/codes the
-SDK matches on those, otherwise it falls back to the sales-line description.
-The live endpoint expects numeric `Type` enum values; the SDK accepts friendly
-strings like `'Sales'` and translates them before sending.
+`FindArticleSalesOrders` returns sold article lines with `articleId`, `articleCode`,
+`articleName`, bon `number`, date, quantity, unit and total price (verified 2026-10-24),
+one line per sale line and without the duplicates of `FindSales`. The report matches on id
+or code and falls back to the line description. The live endpoint expects numeric `Type`
+enum values; the SDK accepts names like `'Sales'` and translates them (see "type `All` vs
+`Sales`" below; for till totals pass `type: 'All'`).
 
 ## Response shape conventions
 
@@ -107,7 +159,10 @@ combination of:
 - `groupByArticleGroup: true`
 
 Returned entries get the relevant fields populated; absent fields are
-`null`.
+`null`. The id fields are spelt `divisionID` / `articleGroupID` as the server sends them.
+
+Filters are the lists `DivisionIds` / `ArticleGroupIds` (`divisionIds`, `articleGroupIds`;
+the singular SDK options are sent as one-element lists).
 
 ## Discovering whether an endpoint exists
 
@@ -187,5 +242,14 @@ of individual wristbands behind it (the wallets don't either). After closing,
 a remainder of 1–15 is normal: bands that left without an exit scan. Whether
 money hangs on them is answered by the wallets: open postings dated today.
 
-One further endpoint exists but is not wrapped yet:
-`Subscriptions/FindSubscriptions`.
+## Existing endpoints that are not wrapped (yet)
+
+All listed in `/json/documentation`; use `client.post()` until there is a wrapper.
+
+- `Subscriptions/FindSubscriptions`
+- `General/GetCard`, `Counter/GetCreditSalesByDivisionCard`, `Counter/GetTableSalesWithoutTable`
+  (see the wristband section)
+- `General/CouponCalculate`, `General/CouponReserve`, `General/CouponRelease`,
+  `General/GiftCertificateCalculate`, `General/VoucherValidate`: wrapped on the unmerged
+  branch `codex/article-sales-report`, not verified live. ⚠ `CouponReserve` /
+  `CouponRelease` change state.
